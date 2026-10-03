@@ -30,8 +30,17 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Sensitive credentials & Firebase Admin SDK keys (CRITICAL: Do not commit server keys)
+*-firebase-adminsdk-*.json
+*adminsdk*.json
+service-account*.json
+credentials*.json
+*.prompt
 
 # typescript
 *.tsbuildinfo

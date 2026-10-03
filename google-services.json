@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "468631780267",
+    "project_id": "sachin-malik",
+    "storage_bucket": "sachin-malik.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:468631780267:android:29903c3b565444354bf0ee",
+        "android_client_info": {
+          "package_name": "com.sachinmalik.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2V0Pm4UAOVKtXXGWg7rvq1EWGmGh9bg0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
