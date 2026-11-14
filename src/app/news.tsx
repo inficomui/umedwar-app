@@ -9,6 +9,7 @@ import {
   StatusBar,
   Modal,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -145,8 +146,8 @@ export default function NewsScreen() {
         {/* Page Title & Filter Row */}
         <View style={styles.titleFilterRow}>
           <View style={styles.titleTextGroup}>
-            <Text style={styles.pageTitle}>बातम्या</Text>
-            <Text style={styles.pageSubtitle}>ताज्या घडामोडी, उपक्रम आणि विकासकार्य</Text>
+            <Text style={styles.pageTitle}>अपडेट्स व घडामोडी</Text>
+            <Text style={styles.pageSubtitle}>मतदारसंघातील उपक्रम, विकासकामे व अधिकृत माहिती</Text>
           </View>
 
           {/* Filter Dropdown Button */}
@@ -155,9 +156,23 @@ export default function NewsScreen() {
             onPress={() => setFilterDropdownOpen(!filterDropdownOpen)}
             activeOpacity={0.85}
           >
-            <Text style={styles.filterDropdownText}>सर्व बातम्या</Text>
+            <Text style={styles.filterDropdownText}>सर्व घडामोडी</Text>
             <Icon source="chevron-down" size={16} color="#FFFFFF" />
           </TouchableOpacity>
+        </View>
+
+        {/* Civic Source & Non-Government Disclaimer Banner */}
+        <View style={styles.govDisclaimerStrip}>
+          <Icon source="shield-alert-outline" size={15} color="#9A3412" />
+          <Text style={styles.govDisclaimerText}>
+            हे ॲप शासकीय संस्था नसून जनसंपर्क व्यासपीठ आहे. शासकीय योजना माहिती स्रोत:{" "}
+            <Text 
+              style={styles.govDisclaimerLink}
+              onPress={() => Linking.openURL("https://www.maharashtra.gov.in")}
+            >
+              maharashtra.gov.in
+            </Text>
+          </Text>
         </View>
 
         {/* Horizontal Category Filter Pills */}
@@ -282,7 +297,7 @@ export default function NewsScreen() {
           </TouchableOpacity>
         </ScrollView>
 
-        {/* Featured Breaking News Card ("मुख्य बातमी") */}
+        {/* Featured Card ("मुख्य अद्यतन") */}
         {featuredNews && (
           <TouchableOpacity
             style={styles.featuredCard}
@@ -305,7 +320,7 @@ export default function NewsScreen() {
               />
               <View style={styles.breakingBadge}>
                 <Text style={styles.breakingBadgeText}>
-                  {featuredNews.isFeatured || (featuredNews as any).isBreaking ? "मुख्य बातमी" : "ताजी बातमी"}
+                  {featuredNews.isFeatured || (featuredNews as any).isBreaking ? "मुख्य अद्यतन" : "ताजे अद्यतन"}
                 </Text>
               </View>
             </View>
@@ -314,7 +329,7 @@ export default function NewsScreen() {
             <View style={styles.featuredContentColumn}>
               <View style={styles.dateRow}>
                 <Icon source="calendar-blank-outline" size={13} color="#78716C" />
-                <Text style={styles.dateText}>{featuredNews.date || "ताजी बातमी"}</Text>
+                <Text style={styles.dateText}>{featuredNews.date || "ताजे अद्यतन"}</Text>
               </View>
 
               <Text style={styles.featuredTitle} numberOfLines={3}>
@@ -344,9 +359,9 @@ export default function NewsScreen() {
 
         {filteredNews.length === 0 ? (
           <View style={styles.emptyStateContainer}>
-            <Icon source="newspaper-variant-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyStateTitle}>कोणतीही बातमी उपलब्ध नाही</Text>
-            <Text style={styles.emptyStateSubtitle}>सध्या या श्रेणीत कोणतीही बातमी उपलब्ध नाही.</Text>
+            <Icon source="bullhorn-outline" size={48} color="#D1D5DB" />
+            <Text style={styles.emptyStateTitle}>कोणतेही अद्यतन उपलब्ध नाही</Text>
+            <Text style={styles.emptyStateSubtitle}>सध्या या श्रेणीत कोणतेही अद्यतन उपलब्ध नाही.</Text>
           </View>
         ) : (
           <>
@@ -377,7 +392,7 @@ export default function NewsScreen() {
                     <View style={styles.newsListTextCol}>
                       <View style={styles.dateRow}>
                         <Icon source="calendar-blank-outline" size={12} color="#78716C" />
-                        <Text style={styles.dateText}>{item.date || "ताजी बातमी"}</Text>
+                        <Text style={styles.dateText}>{item.date || "ताजे अद्यतन"}</Text>
                       </View>
                       <Text style={styles.newsListTitle} numberOfLines={2}>
                         {item.title}
@@ -396,9 +411,9 @@ export default function NewsScreen() {
               </View>
             )}
 
-            {/* "अधिक बातम्या पहा ⌵" (Load More Button) */}
+            {/* "अधिक अद्यतने पहा ⌵" (Load More Button) */}
             <TouchableOpacity style={styles.loadMoreBtn} activeOpacity={0.85}>
-              <Text style={styles.loadMoreText}>अधिक बातम्या पहा</Text>
+              <Text style={styles.loadMoreText}>अधिक अद्यतने पहा</Text>
               <Icon source="chevron-down" size={17} color="#E05300" />
             </TouchableOpacity>
           </>
@@ -429,8 +444,7 @@ export default function NewsScreen() {
                   {Array.isArray(selectedNews.fullContent)
                     ? selectedNews.fullContent.join("\n\n")
                     : selectedNews.fullContent || selectedNews.description}
-                </Text>
-                <TouchableOpacity
+                </Text>                <TouchableOpacity
                   style={styles.modalCloseBtn}
                   onPress={() => setSelectedNews(null)}
                   activeOpacity={0.85}
@@ -870,5 +884,31 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginTop: 6,
     textAlign: "center",
+  },
+  govDisclaimerStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 10,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  govDisclaimerText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#78350F",
+    fontWeight: "500",
+  },
+  govDisclaimerLink: {
+    color: "#1D4ED8",
+    fontWeight: "700",
+    textDecorationLine: "underline",
   },
 });

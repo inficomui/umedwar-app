@@ -11,15 +11,18 @@ import {
   RefreshControl,
   Share,
   Linking,
+  Modal,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Icon } from "react-native-paper";
 import { useCampaign } from "../context/CampaignContext";
+import { authApi } from "../services/authApi";
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { refreshAppConfig } = useCampaign();
+  const { refreshAppConfig, isLoggedIn, logout } = useCampaign();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -105,7 +108,16 @@ export default function SettingsScreen() {
         {
           text: "लॉगआउट करा",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
+            try {
+              if (logout) {
+                await logout();
+              } else {
+                await authApi.logout();
+              }
+            } catch {
+              // ignore
+            }
             Alert.alert("लॉगआउट झाले", "तुम्ही सुरक्षितपणे बाहेर पडला आहात.");
             router.replace("/login");
           },
@@ -202,8 +214,8 @@ export default function SettingsScreen() {
                 <Icon source="bullhorn-outline" size={16} color="#2563EB" />
               </View>
               <View>
-                <Text style={styles.rowTitle}>बातम्या व घडामोडी</Text>
-                <Text style={styles.rowSubtext}>नवीन बातम्या प्रकाशित झाल्यावर</Text>
+                <Text style={styles.rowTitle}>अद्यतने व घडामोडी</Text>
+                <Text style={styles.rowSubtext}>नवीन अद्यतन प्रकाशित झाल्यावर</Text>
               </View>
             </View>
             <Switch
@@ -369,7 +381,22 @@ export default function SettingsScreen() {
               <View style={[styles.rowIconWrap, { backgroundColor: "#F3F4F6" }]}>
                 <Icon source="file-document-outline" size={16} color="#4B5563" />
               </View>
-              <Text style={styles.rowTitle}>गोपनीयता धोरण</Text>
+              <Text style={styles.rowTitle}>गोपनीयता धोरण (Privacy Policy)</Text>
+            </View>
+            <Icon source="chevron-right" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+
+          {/* About App */}
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => router.push("/app-about")}
+            activeOpacity={0.75}
+          >
+            <View style={styles.rowLeft}>
+              <View style={[styles.rowIconWrap, { backgroundColor: "#FFF7ED" }]}>
+                <Icon source="information-outline" size={16} color="#EA580C" />
+              </View>
+              <Text style={styles.rowTitle}>ॲपबद्दल (About App)</Text>
             </View>
             <Icon source="chevron-right" size={20} color="#9CA3AF" />
           </TouchableOpacity>
@@ -443,7 +470,7 @@ export default function SettingsScreen() {
 
           {/* Clear Cache */}
           <TouchableOpacity
-            style={styles.settingRow}
+            style={[styles.settingRow, !isLoggedIn && { borderBottomWidth: 0 }]}
             onPress={handleClearCache}
             activeOpacity={0.75}
           >
@@ -461,25 +488,48 @@ export default function SettingsScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Logout */}
-          <TouchableOpacity
-            style={[styles.settingRow, { borderBottomWidth: 0 }]}
-            onPress={handleLogout}
-            activeOpacity={0.75}
-          >
-            <View style={styles.rowLeft}>
-              <View style={[styles.rowIconWrap, { backgroundColor: "#FEE2E2" }]}>
-                <Icon source="logout" size={16} color="#DC2626" />
-              </View>
-              <Text style={[styles.rowTitle, { color: "#DC2626" }]}>लॉगआउट</Text>
-            </View>
-            <Icon source="chevron-right" size={20} color="#FCA5A5" />
-          </TouchableOpacity>
+          {/* Logout & Delete Account (Only for logged-in users) */}
+          {isLoggedIn ? (
+            <>
+              {/* Logout */}
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={handleLogout}
+                activeOpacity={0.75}
+              >
+                <View style={styles.rowLeft}>
+                  <View style={[styles.rowIconWrap, { backgroundColor: "#FEE2E2" }]}>
+                    <Icon source="logout" size={16} color="#DC2626" />
+                  </View>
+                  <Text style={[styles.rowTitle, { color: "#DC2626" }]}>लॉगआउट</Text>
+                </View>
+                <Icon source="chevron-right" size={20} color="#FCA5A5" />
+              </TouchableOpacity>
+
+              {/* Delete Account (खाते हटवा) */}
+              <TouchableOpacity
+                style={[styles.settingRow, { borderBottomWidth: 0 }]}
+                onPress={() => router.push("/delete-account")}
+                activeOpacity={0.75}
+              >
+                <View style={styles.rowLeft}>
+                  <View style={[styles.rowIconWrap, { backgroundColor: "#FEF2F2" }]}>
+                    <Icon source="account-remove-outline" size={16} color="#DC2626" />
+                  </View>
+                  <View>
+                    <Text style={[styles.rowTitle, { color: "#DC2626" }]}>खाते हटवा (Delete Account)</Text>
+                    <Text style={styles.rowSubtext}>आपले खाते व सर्व डेटा कायमस्वरूपी नष्ट करा</Text>
+                  </View>
+                </View>
+                <Icon source="chevron-right" size={20} color="#FCA5A5" />
+              </TouchableOpacity>
+            </>
+          ) : null}
         </View>
 
         {/* App Version Footer */}
         <View style={styles.versionFooter}>
-          <Text style={styles.versionText}>सचिन मलिक ॲप — आवृत्ती 1.0.0</Text>
+          <Text style={styles.versionText}>सचिन मलिक ॲप — आवृत्ती 1.0.3</Text>
           <Text style={styles.versionSubtext}>Inficom AI Solutions</Text>
         </View>
       </ScrollView>

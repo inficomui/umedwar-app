@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,50 +8,21 @@ import {
   StatusBar,
   Alert,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Icon } from "react-native-paper";
+import { appConfigApi } from "../services/appConfigApi";
 
 interface DocumentItem {
-  id: string;
-  category: "notice" | "scheme" | "pdf" | "other";
+  id: string | number;
+  category: "notice" | "scheme" | "pdf" | "other" | string;
   title: string;
-  fileSize: string;
+  fileSize?: string;
+  url?: string;
+  file_url?: string;
 }
-
-const DOCUMENTS_DATA: DocumentItem[] = [
-  {
-    id: "doc-1",
-    category: "pdf",
-    title: "विकास आराखडा 2026-2030",
-    fileSize: "PDF • 2.4 MB",
-  },
-  {
-    id: "doc-2",
-    category: "notice",
-    title: "जनसंवाद सभा सूचना",
-    fileSize: "PDF • 1.2 MB",
-  },
-  {
-    id: "doc-3",
-    category: "notice",
-    title: "स्वच्छता अभियान मार्गदर्शक",
-    fileSize: "PDF • 950 KB",
-  },
-  {
-    id: "doc-4",
-    category: "scheme",
-    title: "शासकीय योजनांची माहिती",
-    fileSize: "PDF • 1.8 MB",
-  },
-  {
-    id: "doc-5",
-    category: "scheme",
-    title: "पाणीपुरवठा सुधारणा योजना",
-    fileSize: "PDF • 2.1 MB",
-  },
-];
 
 const DOC_CATEGORIES = [
   { id: "all", name: "सर्व" },
@@ -63,27 +34,54 @@ const DOC_CATEGORIES = [
 
 export default function DocumentsScreen() {
   const router = useRouter();
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+  const fetchDocs = useCallback(async () => {
+    try {
+      const data = await appConfigApi.getDocuments();
+      if (Array.isArray(data)) {
+        setDocuments(data);
+      }
+    } catch {
+      // Ignore network errors
+    }
   }, []);
 
-  const filteredDocs = DOCUMENTS_DATA.filter((item) => {
+  useEffect(() => {
+    fetchDocs();
+  }, [fetchDocs]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchDocs();
+    setRefreshing(false);
+  }, [fetchDocs]);
+
+  const filteredDocs = documents.filter((item) => {
     if (selectedCategory === "all") return true;
     return item.category === selectedCategory;
   });
 
-  const handleDownload = (item: DocumentItem) => {
+  const handleDownload = async (item: DocumentItem) => {
+    const fileUrl = item.url || item.file_url;
+    if (fileUrl) {
+      try {
+        const supported = await Linking.canOpenURL(fileUrl);
+        if (supported) {
+          await Linking.openURL(fileUrl);
+          return;
+        }
+      } catch {
+        // Fallback
+      }
+    }
     setDownloadingId(item.id);
     setTimeout(() => {
       setDownloadingId(null);
-      Alert.alert("डाउनलोड पूर्ण", `${item.title} डाऊनलोड फोल्डरमध्ये सेव्ह झाली आहे.`);
+      Alert.alert("दस्तऐवज", `${item.title} उघडण्यात येत आहे.`);
     }, 600);
   };
 
@@ -159,7 +157,15 @@ export default function DocumentsScreen() {
           />
         }
       >
-        {filteredDocs.map((doc) => {
+        {filteredDocs.length === 0 ? (
+          <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 48, paddingHorizontal: 20 }}>
+            <Icon source="file-document-outline" size={48} color="#D1D5DB" />
+            <Text style={{ marginTop: 12, fontSize: 15, fontWeight: "700", color: "#6B7280", textAlign: "center" }}>
+              सध्या कोणतेही दस्तऐवज उपलब्ध नाहीत.
+            </Text>
+          </View>
+        ) : (
+          filteredDocs.map((doc) => {
           const isDownloading = downloadingId === doc.id;
           return (
             <View key={doc.id} style={styles.docCard}>
@@ -191,7 +197,8 @@ export default function DocumentsScreen() {
               </TouchableOpacity>
             </View>
           );
-        })}
+        })
+      )}
       </ScrollView>
     </SafeAreaView>
   );

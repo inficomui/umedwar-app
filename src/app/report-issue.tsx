@@ -45,13 +45,7 @@ const CATEGORIES: CategoryType[] = [
   { id: "other", name: "इतर", icon: "dots-horizontal" },
 ];
 
-const PRESET_EVIDENCE_PHOTOS = [
-  { id: "pothole", label: "रस्ते खड्डे", source: require("../../assets/images/issue_pothole.png") },
-  { id: "garbage", label: "कचरा समस्या", source: require("../../assets/images/issue_garbage.png") },
-  { id: "water", label: "पाणी गळती / पुरवठा", source: require("../../assets/images/issue_water.png") },
-  { id: "drain", label: "ड्रेनेज / तुंबलेले गटार", source: require("../../assets/images/issue_drain.png") },
-  { id: "light", label: "स्ट्रीटलाईट बंद", source: require("../../assets/images/issue_streetlight.png") },
-];
+
 
 export default function ReportIssueScreen() {
   const router = useRouter();
@@ -193,14 +187,6 @@ export default function ReportIssueScreen() {
     }
   };
 
-  const handleAddPresetPhoto = (photoSource: any) => {
-    if (uploadedPhotos.length >= 4) {
-      Alert.alert("मर्यादा पूर्ण", "आपण जास्तीत जास्त ४ फोटो जोडू शकता.");
-      return;
-    }
-    setUploadedPhotos((prev) => [...prev, photoSource]);
-    setIsPhotoModalOpen(false);
-  };
 
   const handleAddUrlPhoto = () => {
     const trimmed = customPhotoUrl.trim();
@@ -935,21 +921,7 @@ export default function ReportIssueScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Presets List */}
-            <Text style={styles.modalSectionLabel}>किंवा समस्येनुसार नमुना फोटो निवडा:</Text>
-            <View style={styles.presetGrid}>
-              {PRESET_EVIDENCE_PHOTOS.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={styles.presetTile}
-                  onPress={() => handleAddPresetPhoto(p.source)}
-                  activeOpacity={0.85}
-                >
-                  <Image source={p.source} style={styles.presetThumb} contentFit="cover" />
-                  <Text style={styles.presetLabel} numberOfLines={1}>{p.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+
 
             {/* Custom URL Input */}
             <View style={styles.modalUrlSection}>

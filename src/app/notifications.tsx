@@ -18,98 +18,7 @@ import { NotificationMediaRenderer, NotificationItem } from "../components/Notif
 import { useCampaign } from "../context/CampaignContext";
 import { triggerLocalNotification, getCachedPushTokens } from "../services/notificationPushService";
 
-const NOTIFICATIONS_DATA: NotificationItem[] = [
-  {
-    id: "notif-1",
-    category: "issues",
-    icon: "check-circle",
-    iconColor: "#16A34A",
-    iconBg: "#DCFCE7",
-    title: "आपली समस्या निकाली",
-    description: "आपण नोंदवलेली “रस्त्याची दुरुस्ती” समस्या यशस्वीरीत्या पूर्ण झाली आहे.",
-    timeAgo: "10 मिनिटांपूर्वी",
-    indicatorDot: "#16A34A",
-    targetRoute: "/notification-detail",
-  },
-  {
-    id: "notif-2",
-    category: "events",
-    icon: "calendar",
-    iconColor: "#EA580C",
-    iconBg: "#FFEDD5",
-    title: "जिल्हा जनसंवाद सभा",
-    description: "25 सप्टेंबर 2026 रोजी औरंगाबाद येथे जिल्हा जनसंवाद सभा आयोजित केली आहे.",
-    timeAgo: "1 तासापूर्वी",
-    indicatorDot: "#DC2626",
-    targetRoute: "/event-detail",
-  },
-  {
-    id: "notif-3",
-    category: "issues",
-    icon: "road-variant",
-    iconColor: "#2563EB",
-    iconBg: "#DBEAFE",
-    title: "समस्या अपडेट",
-    description: "आपली “पाणीपुरवठा” समस्या आता प्रगतीपथावर आहे.",
-    timeAgo: "3 तासांपूर्वी",
-    indicatorDot: "#2563EB",
-    targetRoute: "/issue-detail",
-  },
-  {
-    id: "notif-4",
-    category: "news",
-    icon: "bullhorn",
-    iconColor: "#9333EA",
-    iconBg: "#F3E8FF",
-    title: "महत्त्वाची घोषणा",
-    description: "नवीन पाणी योजना लवकरच सुरू होणार आहे. अधिक माहितीसाठी येथे क्लिक करा.",
-    timeAgo: "1 दिवसापूर्वी",
-    targetRoute: "/notification-detail",
-  },
-  {
-    id: "notif-5",
-    category: "other",
-    icon: "file-document",
-    iconColor: "#DC2626",
-    iconBg: "#FEE2E2",
-    title: "नवीन दस्तऐवज उपलब्ध",
-    description: "“स्वच्छ औरंगाबाद अभियान” संबंधित पीडीएफ दस्तऐवज आता उपलब्ध आहे.",
-    timeAgo: "2 दिवसांपूर्वी",
-    targetRoute: "/documents",
-  },
-  {
-    id: "notif-6",
-    category: "news",
-    icon: "play-circle",
-    iconColor: "#DC2626",
-    iconBg: "#FEE2E2",
-    title: "नवीन व्हिडिओ",
-    description: "जनतेसाठी विकासकामांची माहिती - आमचा नवीन व्हिडिओ पहा.",
-    timeAgo: "3 दिवसांपूर्वी",
-    targetRoute: "/videos",
-  },
-  {
-    id: "notif-7",
-    category: "other",
-    icon: "bell",
-    iconColor: "#D97706",
-    iconBg: "#FEF3C7",
-    title: "प्रणाली देखभाल",
-    description: "उद्या सकाळी 2 ते 4 या वेळेत ॲपची सेवा तात्पुरती बंद राहील.",
-    timeAgo: "4 दिवसांपूर्वी",
-  },
-  {
-    id: "notif-8",
-    category: "events",
-    icon: "leaf",
-    iconColor: "#16A34A",
-    iconBg: "#DCFCE7",
-    title: "स्वच्छता अभियान",
-    description: "2 ऑक्टोबर रोजी विशेष स्वच्छता अभियान राबविण्यात येणार आहे. सहभागी व्हा.",
-    timeAgo: "5 दिवसांपूर्वी",
-    targetRoute: "/events",
-  },
-];
+const NOTIFICATIONS_DATA: NotificationItem[] = [];
 
 const getNotificationIcon = (item: NotificationItem) => {
   if (item.icon && item.iconColor && item.iconBg) {
@@ -152,8 +61,7 @@ export default function NotificationsScreen() {
     }
   }, [refreshAppConfig]);
 
-  const sourceNotifications =
-    notifications && notifications.length > 0 ? notifications : NOTIFICATIONS_DATA;
+  const sourceNotifications = notifications || [];
 
   const allCount = sourceNotifications.length;
   const issuesCount = sourceNotifications.filter((i) => i.category === "issues").length;
@@ -167,7 +75,7 @@ export default function NotificationsScreen() {
     { id: "all", label: `सर्व (${allCount})` },
     { id: "issues", label: `समस्या (${issuesCount})` },
     { id: "events", label: `कार्यक्रम (${eventsCount})` },
-    { id: "news", label: `बातम्या (${newsCount})` },
+    { id: "news", label: `अद्यतने (${newsCount})` },
     { id: "other", label: `इतर (${otherCount})` },
   ];
 
@@ -290,7 +198,15 @@ export default function NotificationsScreen() {
           />
         }
       >
-        {filteredItems.map((item) => {
+        {filteredItems.length === 0 ? (
+          <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 48, paddingHorizontal: 20 }}>
+            <Icon source="bell-outline" size={48} color="#D1D5DB" />
+            <Text style={{ marginTop: 12, fontSize: 15, fontWeight: "700", color: "#6B7280", textAlign: "center" }}>
+              कोणत्याही सूचना उपलब्ध नाहीत.
+            </Text>
+          </View>
+        ) : (
+          filteredItems.map((item) => {
           const iconMeta = getNotificationIcon(item);
           const hasMedia = Boolean(
             item.mediaType &&
@@ -377,7 +293,8 @@ export default function NotificationsScreen() {
               {cardContent}
             </TouchableOpacity>
           );
-        })}
+        })
+      )}
       </ScrollView>
     </SafeAreaView>
   );

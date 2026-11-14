@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,26 +9,80 @@ import {
   StatusBar,
   Alert,
   RefreshControl,
+  Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Icon } from "react-native-paper";
+import { appConfigApi } from "../services/appConfigApi";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (210 / 375));
 
 export default function EventDetailScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    id?: string;
+    title?: string;
+    date?: string;
+    time?: string;
+    location?: string;
+    description?: string;
+    image?: string;
+    day?: string;
+    month?: string;
+  }>();
+
+  const [eventData, setEventData] = useState<any>(null);
   const [isRsvpd, setIsRsvpd] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const onRefresh = useCallback(() => {
+  const fetchDetail = useCallback(async () => {
+    if (params.id) {
+      try {
+        const item = await appConfigApi.getEventById(params.id);
+        if (item) {
+          setEventData(item);
+        }
+      } catch {
+        // Fallback to params
+      }
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    fetchDetail();
+  }, [fetchDetail]);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  }, []);
+    await fetchDetail();
+    setRefreshing(false);
+  }, [fetchDetail]);
+
+  const eventTitle = eventData?.title || params.title || "कार्यक्रम";
+  const eventDate = eventData?.date || params.date || "तारीख उपलब्ध नाही";
+  const eventTime = eventData?.time || params.time || "वेळ उपलब्ध नाही";
+  const eventLocation = eventData?.location || params.location || "स्थळ उपलब्ध नाही";
+  const eventDesc =
+    eventData?.description ||
+    eventData?.narrative ||
+    params.description ||
+    "कार्यक्रमाचा सविस्तर तपशील लवकरच उपलब्ध होईल.";
+  const heroImage = eventData?.image || eventData?.imageUrl || params.image;
+  const badgeDay = eventData?.day || params.day || "";
+  const badgeMonth = eventData?.month || params.month || "";
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `${eventTitle}\nतारीख: ${eventDate}\nवेळ: ${eventTime}\nस्थळ: ${eventLocation}`,
+      });
+    } catch {
+      Alert.alert("शेअर", "कार्यक्रमाची माहिती कॉपी झाली आहे.");
+    }
+  };
 
   const handleRsvp = () => {
     setIsRsvpd(!isRsvpd);
@@ -64,9 +118,7 @@ export default function EventDetailScreen() {
 
         <TouchableOpacity
           style={styles.shareButton}
-          onPress={() =>
-            Alert.alert("शेअर", "कार्यक्रमाची लिंक कॉपी करण्यात आली आहे.")
-          }
+          onPress={handleShare}
           activeOpacity={0.8}
         >
           <Icon source="share-variant" size={20} color="#FFFFFF" />
@@ -90,21 +142,27 @@ export default function EventDetailScreen() {
         {/* Hero Photo Banner */}
         <View style={styles.heroContainer}>
           <Image
-            source={require("../../assets/images/event_hero_banner.jpg")}
+            source={
+              heroImage
+                ? { uri: heroImage }
+                : require("../../assets/images/event_hero_banner.jpg")
+            }
             style={styles.heroImage}
             contentFit="cover"
           />
 
           {/* Floating Date Badge on bottom right of image */}
-          <View style={styles.dateBadgeFloat}>
-            <Text style={styles.dateBadgeDay}>25</Text>
-            <Text style={styles.dateBadgeSub}>सप्टेंबर 2026</Text>
-          </View>
+          {(badgeDay || badgeMonth) ? (
+            <View style={styles.dateBadgeFloat}>
+              <Text style={styles.dateBadgeDay}>{badgeDay}</Text>
+              <Text style={styles.dateBadgeSub}>{badgeMonth}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Details Card */}
         <View style={styles.detailsCard}>
-          <Text style={styles.eventMainTitle}>जिल्हा जनसंवाद सभा</Text>
+          <Text style={styles.eventMainTitle}>{eventTitle}</Text>
 
           {/* Meta Info Rows */}
           <View style={styles.metaList}>
@@ -112,32 +170,28 @@ export default function EventDetailScreen() {
               <View style={styles.metaIconBox}>
                 <Icon source="calendar" size={18} color="#EA580C" />
               </View>
-              <Text style={styles.metaRowText}>25 सप्टेंबर 2026, शनिवार</Text>
+              <Text style={styles.metaRowText}>{eventDate}</Text>
             </View>
 
             <View style={styles.metaRowItem}>
               <View style={styles.metaIconBox}>
                 <Icon source="clock-outline" size={18} color="#EA580C" />
               </View>
-              <Text style={styles.metaRowText}>सायं 05:00 वाजता</Text>
+              <Text style={styles.metaRowText}>{eventTime}</Text>
             </View>
 
             <View style={styles.metaRowItem}>
               <View style={styles.metaIconBox}>
                 <Icon source="map-marker" size={18} color="#EA580C" />
               </View>
-              <Text style={styles.metaRowText}>
-                कृषी उत्पन्न बाजार समिती, औरंगाबाद - 431001
-              </Text>
+              <Text style={styles.metaRowText}>{eventLocation}</Text>
             </View>
           </View>
 
           {/* Section: कार्यक्रमाबद्दल */}
           <View style={styles.aboutSection}>
             <Text style={styles.sectionTitle}>कार्यक्रमाबद्दल</Text>
-            <Text style={styles.narrativeText}>
-              जिल्ह्यातील नागरिकांच्या विविध समस्यांवर संवाद साधण्यासाठी ही सभा आयोजित केली आहे. सर्व नागरिकांनी मोठ्या संख्येने उपस्थित राहावे.
-            </Text>
+            <Text style={styles.narrativeText}>{eventDesc}</Text>
           </View>
 
           {/* Action Buttons Row */}

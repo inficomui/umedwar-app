@@ -233,20 +233,28 @@ export default function HomeScreen() {
 
         {/* Candidate / Umedwar Name Showcase Card (Bottom of Carousel) */}
         <TouchableOpacity
-          style={styles.candidateNameCard}
+          style={[
+            styles.candidateNameCard,
+            (!carouselBanners || carouselBanners.length === 0) && { marginTop: 12 },
+          ]}
           activeOpacity={0.9}
           onPress={() => router.push("/about")}
         >
           {/* Top Badges Row */}
           <View style={styles.candidateBadgeRow}>
+            {party?.shortName ? (
+              <View style={styles.candidatePartyBadge}>
+                <Text style={styles.candidatePartyBadgeText}>
+                  🏹 {party.shortName}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.candidateHonorificBadge}>
-              <Text style={styles.candidateHonorificText}>
+              <Text
+                style={styles.candidateHonorificText}
+                numberOfLines={2}
+              >
                 ★ {candidate.honorific || "लोकप्रिय उमेदवार"} ★
-              </Text>
-            </View>
-            <View style={styles.candidatePartyBadge}>
-              <Text style={styles.candidatePartyBadgeText}>
-                🏹 {party.shortName}
               </Text>
             </View>
           </View>
@@ -400,12 +408,12 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Section: News & Updates ("ताज्या घडामोडी व बातम्या") */}
+        {/* Section: News & Updates ("ताज्या घडामोडी व अद्यतने") */}
         {newsArticles && newsArticles.length > 0 && (
           <View style={styles.newsSection}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.titleWithUnderline}>
-                <Text style={styles.sectionTitle}>ताज्या घडामोडी व बातम्या</Text>
+                <Text style={styles.sectionTitle}>ताज्या घडामोडी व अद्यतने</Text>
                 <View style={styles.titleUnderline} />
               </View>
 
@@ -414,7 +422,7 @@ export default function HomeScreen() {
                 activeOpacity={0.75}
                 onPress={() => router.push("/news")}
               >
-                <Text style={styles.viewAllText}>सर्व बातम्या</Text>
+                <Text style={styles.viewAllText}>सर्व अद्यतने</Text>
                 <Icon source="arrow-right" size={15} color="#E05300" />
               </TouchableOpacity>
             </View>
@@ -440,7 +448,7 @@ export default function HomeScreen() {
                   />
                   <View style={styles.featuredNewsBadge}>
                     <Text style={styles.featuredNewsBadgeText}>
-                      {newsArticles[0].categoryName || "महत्त्वाची बातमी"}
+                      {newsArticles[0].categoryName || "महत्त्वाचे अद्यतन"}
                     </Text>
                   </View>
                 </View>
@@ -449,7 +457,7 @@ export default function HomeScreen() {
                   <View style={styles.newsMetaRow}>
                     <View style={styles.newsMetaItem}>
                       <Icon source="calendar-blank-outline" size={13} color="#78716C" />
-                      <Text style={styles.newsMetaText}>{newsArticles[0].date || "ताजी बातमी"}</Text>
+                      <Text style={styles.newsMetaText}>{newsArticles[0].date || "ताजे अद्यतन"}</Text>
                     </View>
                     {newsArticles[0].readTime && (
                       <View style={styles.newsMetaItem}>
@@ -468,7 +476,7 @@ export default function HomeScreen() {
                   </Text>
 
                   <View style={styles.readMoreRow}>
-                    <Text style={styles.readMoreText}>सविस्तर बातमी वाचा</Text>
+                    <Text style={styles.readMoreText}>सविस्तर वाचा</Text>
                     <Icon source="arrow-right" size={15} color="#E05300" />
                   </View>
                 </View>
@@ -498,7 +506,7 @@ export default function HomeScreen() {
                   <View style={styles.newsMetaRow}>
                     <View style={styles.newsMetaItem}>
                       <Icon source="calendar-blank-outline" size={11} color="#78716C" />
-                      <Text style={styles.secondaryNewsDate}>{item.date || "ताजी बातमी"}</Text>
+                      <Text style={styles.secondaryNewsDate}>{item.date || "ताजे अद्यतन"}</Text>
                     </View>
                     {item.categoryName && (
                       <View style={styles.secondaryNewsCatBadge}>
@@ -594,7 +602,7 @@ export default function HomeScreen() {
           <View style={styles.adBannerSection}>
             <View style={styles.adBannerSectionHeader}>
               <View style={styles.titleWithUnderline}>
-                <Text style={styles.sectionTitle}>शासकीय योजना आणि सेवा</Text>
+                <Text style={styles.sectionTitle}>योजना आणि सेवा</Text>
                 <View style={styles.titleUnderline} />
               </View>
             </View>
@@ -650,7 +658,7 @@ export default function HomeScreen() {
               { icon: "calendar-month", label: "कार्यक्रम", route: "/events", bg: "#ECFDF5", color: "#059669" },
               { icon: "image-multiple-outline", label: "गॅलरी", route: "/gallery", bg: "#EFF6FF", color: "#2563EB" },
               { icon: "play-circle-outline", label: "व्हिडिओ", route: "/videos", bg: "#FEE2E2", color: "#DC2626" },
-              { icon: "newspaper-variant-outline", label: "बातम्या", route: "/news", bg: "#F0FDF4", color: "#16A34A" },
+              { icon: "bullhorn-outline", label: "अद्यतन", route: "/news", bg: "#F0FDF4", color: "#16A34A" },
               { icon: "map-marker-radius-outline", label: "नकाशा", route: "/issue-map", bg: "#DBEAFE", color: "#3B82F6" },
               { icon: "account-outline", label: "माझ्याबद्दल", route: "/about", bg: "#FFEDD5", color: "#EA580C" },
               { icon: "phone-outline", label: "संपर्क", route: "/contact", bg: "#F5F3FF", color: "#7C3AED" },
@@ -1440,37 +1448,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginBottom: 4,
+    flexWrap: "wrap",
+    gap: 7,
+    marginBottom: 6,
+    maxWidth: "100%",
   },
   candidateHonorificBadge: {
     backgroundColor: "#FFF7ED",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#FFEDD5",
+    maxWidth: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
   candidateHonorificText: {
-    fontSize: 11.5,
+    fontSize: 11,
+    lineHeight: 16.5,
     fontWeight: "800",
     color: "#C2410C",
     letterSpacing: 0.2,
+    textAlign: "center",
     includeFontPadding: false,
   },
   candidatePartyBadge: {
     backgroundColor: "#FEF3C7",
     paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#FDE68A",
+    alignItems: "center",
+    justifyContent: "center",
   },
   candidatePartyBadgeText: {
     fontSize: 11.5,
+    lineHeight: 16,
     fontWeight: "800",
     color: "#B45309",
     includeFontPadding: false,
+    textAlign: "center",
   },
   candidateBigName: {
     fontSize: 24,

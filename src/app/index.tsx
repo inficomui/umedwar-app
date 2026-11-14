@@ -445,12 +445,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
+    maxWidth: "88%",
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
   },
   honorificRibbonText: {
     color: "#92400E",
     fontWeight: "900",
     fontSize: 11,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+    textAlign: "center",
+    lineHeight: 16,
   },
 
   // Candidate Details

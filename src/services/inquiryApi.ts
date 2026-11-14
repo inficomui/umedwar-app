@@ -1,6 +1,6 @@
 /**
  * Citizen Inquiries & Contact Form API Service
- * Live Backend Server: https://election.crm.inficomaiacademy.com
+ * Live Backend Server: https://backend.misachinmalik.in
  *
  * Handles:
  * - Real-time inquiry submissions from the Contact screen to the live database

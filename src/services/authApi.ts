@@ -1,15 +1,16 @@
 /**
  * Authentication API Service
  * Connected to Live Backend Server:
- * https://election.crm.inficomaiacademy.com
+ * https://backend.misachinmalik.in
  */
 
 import * as FileSystem from "expo-file-system/legacy";
 import { toast } from "../components/Toast";
 
-export const API_BASE_URL =
+export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL ||
-  "https://election.crm.inficomaiacademy.com";
+  "https://backend.misachinmalik.in"
+).replace(/\/+$/, "");
 
 const SESSION_FILE_PATH = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}citizen_session.json`
@@ -98,6 +99,7 @@ export interface GenericResponse {
   success: boolean;
   message?: string;
   error?: string;
+  status?: number;
 }
 
 class AuthApiService {
@@ -475,14 +477,13 @@ class AuthApiService {
     }
 
     if (businessError) {
-      toast.error(businessError, "लॉगिन अयशस्वी");
       return {
         success: false,
         error: businessError,
       };
     }
 
-    // 2. Check local registered citizens database
+    // 2. Check locally registered accounts (offline fallback)
     const localAccounts = await this.getStoredCitizens();
     const matchedAccount = localAccounts.find(
       (acc) =>
@@ -511,7 +512,6 @@ class AuthApiService {
         };
       } else {
         const errorMsg = "चुकीचा पासवर्ड प्रविष्ट केला आहे. कृपया पुन्हा प्रयत्न करा.";
-        toast.error(errorMsg, "पासवर्ड चुकीचा आहे");
         return {
           success: false,
           error: errorMsg,
@@ -519,26 +519,7 @@ class AuthApiService {
       }
     }
 
-    // 3. Fallback demo/citizen account if identifier is provided and password is at least 6 chars
-    if (cleanId && password.length >= 6) {
-      const demoUser: UserProfile = {
-        id: `citizen-${cleanMobile || Date.now()}`,
-        name: cleanId.includes("@") ? cleanId.split("@")[0] : `नागरिक (${cleanId})`,
-        username: cleanId,
-        mobile: cleanMobile.length === 10 ? cleanMobile : "9876543210",
-        role: "citizen",
-      };
-      this.setUser(demoUser);
-      toast.success(`स्वागत आहे, ${demoUser.name}!`, "लॉगिन यशस्वी");
-      return {
-        success: true,
-        message: "डेमो लॉगिन यशस्वी!",
-        data: { user: demoUser },
-      };
-    }
-
-    const invalidMsg = "कृपया योग्य युझरनेम/मोबाईल आणि पासवर्ड टाका.";
-    toast.error(invalidMsg, "लॉगिन अयशस्वी");
+    const invalidMsg = "चुकीचा मोबाईल नंबर/युझरनेम किंवा पासवर्ड. कृपया पुन्हा प्रयत्न करा.";
     return {
       success: false,
       error: invalidMsg,
@@ -550,7 +531,6 @@ class AuthApiService {
    * (Uses server OTP endpoint if available, with simulated fallback)
    */
   async sendOtp(mobile: string, purpose: "login" | "reset_password" = "login"): Promise<SendOtpResponse> {
-    // Try remote endpoint first
     try {
       const res = await this.request<any>("/auth/otp/send", {
         method: "POST",
@@ -561,26 +541,14 @@ class AuthApiService {
         toast.success(res.data.message || `${mobile} वर ६ अंकी OTP पाठवला आहे.`, "OTP पाठवला");
         return res as SendOtpResponse;
       }
-      if (res.error) {
-        toast.error(res.error, "OTP त्रुटी");
-      }
-    } catch {
-      // Endpoint may not be provisioned on remote yet
+      const errMsg = res.error || "OTP पाठवता आला नाही.";
+      toast.error(errMsg, "OTP त्रुटी");
+      return { success: false, error: errMsg };
+    } catch (e: any) {
+      const errMsg = e.message || "सर्व्हरशी संपर्क होऊ शकला नाही.";
+      toast.error(errMsg, "OTP त्रुटी");
+      return { success: false, error: errMsg };
     }
-
-    // Simulated OTP for mobile preview
-    const devCode = "123456";
-    const msg = `${mobile} वर ६ अंकी OTP पाठवला आहे.`;
-    toast.success(`${msg} (डेमो कोड: ${devCode})`, "OTP पाठवला");
-    return {
-      success: true,
-      data: {
-        success: true,
-        message: msg,
-        expiresInSeconds: 300,
-        devOtpCode: devCode,
-      },
-    };
   }
 
   /**
@@ -595,10 +563,10 @@ class AuthApiService {
 
       if (res.success && res.data) {
         const user: UserProfile = {
-          id: String(res.data.id || "1"),
-          name: res.data.name || `नागरिक (${mobile})`,
+          id: String(res.data.id || res.data.user?.id || "1"),
+          name: res.data.name || res.data.user?.name || `नागरिक (${mobile})`,
           mobile: mobile,
-          role: res.data.role || "citizen",
+          role: res.data.role || res.data.user?.role || "citizen",
         };
         this.setUser(user);
         toast.success(`स्वागत आहे, ${user.name}!`, "OTP लॉगिन यशस्वी");
@@ -607,35 +575,14 @@ class AuthApiService {
           data: { user },
         };
       }
-      if (res.error) {
-        toast.error(res.error, "OTP लॉगिन त्रुटी");
-      }
-    } catch {
-      // Remote fallback
+      const errMsg = res.error || "अवैध OTP कोड. कृपया पुन्हा प्रयत्न करा.";
+      toast.error(errMsg, "OTP त्रुटी");
+      return { success: false, error: errMsg };
+    } catch (e: any) {
+      const errMsg = e.message || "सर्व्हरशी संपर्क होऊ शकला नाही.";
+      toast.error(errMsg, "OTP त्रुटी");
+      return { success: false, error: errMsg };
     }
-
-    // Test OTP verification (accepts 123456 or any 6 digits in demo mode)
-    if (otp === "123456" || otp.length === 6) {
-      const demoUser: UserProfile = {
-        id: "otp-user-" + mobile.slice(-4),
-        name: `नागरिक (${mobile})`,
-        mobile: mobile,
-        role: "citizen",
-      };
-      this.setUser(demoUser);
-      toast.success(`स्वागत आहे, ${demoUser.name}!`, "OTP लॉगिन यशस्वी");
-      return {
-        success: true,
-        data: { user: demoUser },
-      };
-    }
-
-    const invalidOtpMsg = "अवैध OTP कोड. कृपया पुन्हा प्रयत्न करा.";
-    toast.error(invalidOtpMsg, "OTP त्रुटी");
-    return {
-      success: false,
-      error: invalidOtpMsg,
-    };
   }
 
   /**
@@ -652,25 +599,14 @@ class AuthApiService {
         toast.success(res.data.message || "OTP पाठवला आहे.", "OTP पाठवला");
         return res as SendOtpResponse;
       }
-      if (res.error) {
-        toast.error(res.error, "OTP त्रुटी");
-      }
-    } catch {
-      // Remote fallback
+      const errMsg = res.error || "OTP पाठवता आला नाही.";
+      toast.error(errMsg, "OTP त्रुटी");
+      return { success: false, error: errMsg };
+    } catch (e: any) {
+      const errMsg = e.message || "सर्व्हरशी संपर्क होऊ शकला नाही.";
+      toast.error(errMsg, "OTP त्रुटी");
+      return { success: false, error: errMsg };
     }
-
-    const devCode = "456789";
-    const msg = `${identifier} वर पासवर्ड रीसेट कोड पाठवला आहे.`;
-    toast.success(`${msg} (डेमो कोड: ${devCode})`, "OTP पाठवला");
-    return {
-      success: true,
-      data: {
-        success: true,
-        message: msg,
-        expiresInSeconds: 300,
-        devOtpCode: devCode,
-      },
-    };
   }
 
   /**
@@ -687,31 +623,14 @@ class AuthApiService {
         toast.success("OTP पडताळणी यशस्वी!", "OTP पडताळणी");
         return res as VerifyOtpResponse;
       }
-      if (res.error) {
-        toast.error(res.error, "OTP पडताळणी त्रुटी");
-      }
-    } catch {
-      // Remote fallback
+      const errMsg = res.error || "अवैध किंवा कालबाह्य OTP कोड.";
+      toast.error(errMsg, "OTP पडताळणी त्रुटी");
+      return { success: false, error: errMsg };
+    } catch (e: any) {
+      const errMsg = e.message || "सर्व्हरशी संपर्क होऊ शकला नाही.";
+      toast.error(errMsg, "OTP त्रुटी");
+      return { success: false, error: errMsg };
     }
-
-    if (otp === "456789" || otp === "123456" || otp.length === 6) {
-      toast.success("OTP पडताळणी यशस्वी! कृपया नवीन पासवर्ड सेट करा.", "OTP पडताळणी");
-      return {
-        success: true,
-        data: {
-          success: true,
-          resetToken: "rst_demo_token_" + Date.now(),
-          message: "OTP यशस्वीरित्या सत्यापित झाला आहे.",
-        },
-      };
-    }
-
-    const otpFailMsg = "अवैध किंवा कालबाह्य OTP कोड.";
-    toast.error(otpFailMsg, "OTP त्रुटी");
-    return {
-      success: false,
-      error: otpFailMsg,
-    };
   }
 
   /**
@@ -728,24 +647,19 @@ class AuthApiService {
         toast.success("आपला पासवर्ड यशस्वीरित्या बदलण्यात आला आहे!", "पासवर्ड बदलला");
         return res as GenericResponse;
       }
-      if (res.error) {
-        toast.error(res.error, "पासवर्ड रीसेट त्रुटी");
-      }
-    } catch {
-      // Remote fallback
+      const errMsg = res.error || "पासवर्ड रीसेट करता आला नाही.";
+      toast.error(errMsg, "पासवर्ड रीसेट त्रुटी");
+      return { success: false, error: errMsg };
+    } catch (e: any) {
+      const errMsg = e.message || "सर्व्हरशी संपर्क होऊ शकला नाही.";
+      toast.error(errMsg, "पासवर्ड रीसेट त्रुटी");
+      return { success: false, error: errMsg };
     }
-
-    const successMsg = "आपला पासवर्ड यशस्वीरित्या बदलण्यात आला आहे!";
-    toast.success(successMsg, "पासवर्ड बदलला");
-    return {
-      success: true,
-      message: successMsg,
-    };
   }
 
   /**
    * 7. Get Authenticated User Profile
-   * GET https://election.crm.inficomaiacademy.com/auth/me
+   * GET https://backend.misachinmalik.in/auth/me
    */
   async getMe(): Promise<any> {
     return this.request("/auth/me", {
@@ -755,7 +669,7 @@ class AuthApiService {
 
   /**
    * 8. Logout
-   * POST https://election.crm.inficomaiacademy.com/auth/logout
+   * POST https://backend.misachinmalik.in/auth/logout
    */
   async logout(): Promise<void> {
     try {
@@ -766,6 +680,132 @@ class AuthApiService {
       // Ignore network errors on logout
     }
     await this.clearUserSession();
+  }
+
+  /**
+   * 9. Delete Account
+   * Primary: DELETE https://backend.misachinmalik.in/auth/delete-account
+   * Alternative: POST https://backend.misachinmalik.in/auth/delete-account
+   */
+  async deleteAccount(params: { password: string; reason?: string; confirm?: boolean } | string): Promise<GenericResponse> {
+    const user = this.getUser();
+    const cleanPassword = typeof params === "string" ? "" : (params?.password || "").trim();
+    const reason = typeof params === "string" ? params : (params?.reason || "Citizen requested account deletion via app");
+
+    if (!cleanPassword) {
+      const errorMsg = "खाते हटवण्यासाठी पासवर्ड आवश्यक आहे. (Password is required to delete account)";
+      return {
+        success: false,
+        status: 400,
+        error: errorMsg,
+      };
+    }
+
+    const payload = {
+      password: cleanPassword,
+      reason: reason,
+      confirm: true,
+      userId: user?.id,
+      mobile: user?.mobile,
+      username: user?.username || user?.mobile,
+    };
+
+    // Candidate endpoints on backend server
+    const candidateEndpoints: Array<{ path: string; method: "DELETE" | "POST" }> = [
+      { path: "/auth/delete-account", method: "DELETE" },
+      { path: "/auth/delete-account", method: "POST" },
+      { path: "/api/v1/auth/delete-account", method: "DELETE" },
+      { path: "/api/v1/auth/delete-account", method: "POST" },
+    ];
+
+    let lastRes: GenericResponse | null = null;
+    let backendSuccess = false;
+
+    for (const ep of candidateEndpoints) {
+      try {
+        const res = await this.request<GenericResponse>(ep.path, {
+          method: ep.method,
+          body: JSON.stringify(payload),
+          headers: { "x-suppress-toast": "true" },
+        });
+
+        lastRes = res;
+
+        if (res.success) {
+          backendSuccess = true;
+          break;
+        }
+
+        // If credentials failure (401 / 403), stop immediately — don't hit other endpoints
+        if (res.status === 401 || res.status === 403) {
+          const authError = res.error || "चुकीचा पासवर्ड प्रविष्ट केला आहे. (Incorrect password)";
+          return {
+            success: false,
+            status: res.status,
+            error: authError,
+          };
+        }
+
+        if (res.status === 400) {
+          return {
+            success: false,
+            status: res.status,
+            error: res.error || "अवैध विनंती. (Bad Request)",
+          };
+        }
+
+        // If status is 404 (Route not found) or 405 (Method not allowed), continue trying candidate endpoints
+      } catch (e: any) {
+        lastRes = {
+          success: false,
+          status: 0,
+          error: e?.message || "सर्व्हरशी संपर्क होऊ शकला नाही.",
+        };
+      }
+    }
+
+    // If backend rejected or route not found (404 / 500 / network error):
+    // ABORT OPERATION! DO NOT clear session! DO NOT pretend success!
+    if (!backendSuccess) {
+      const is404 = lastRes?.status === 404;
+      const isNetwork = !lastRes?.status || lastRes?.status === 0;
+
+      let errorMsg = lastRes?.error || "खाते हटवता आले नाही.";
+      if (is404) {
+        errorMsg =
+          "सर्व्हर त्रुटी (404 Not Found):\nलाईव्ह सर्व्हरवर 'DELETE /auth/delete-account' हा API रूट उपलब्ध नाही. त्यामुळे खाते हटवण्याची प्रक्रिया रद्द करण्यात आली आहे.\n\n(Backend endpoint not found on https://backend.misachinmalik.in. Operation aborted.)";
+      } else if (isNetwork) {
+        errorMsg =
+          "सर्व्हरशी संपर्क होऊ शकला नाही. कृपया इंटरनेट कनेक्शन तपासा.\n\n(Network error: Could not reach live backend server. Operation aborted.)";
+      }
+
+      return {
+        success: false,
+        status: lastRes?.status || 500,
+        error: errorMsg,
+      };
+    }
+
+    // ONLY IF BACKEND CONFIRMED DELETION (200 OK):
+    // Purge local stored accounts if present
+    if (user?.mobile && REGISTERED_ACCOUNTS_FILE_PATH) {
+      try {
+        const list = await this.getStoredCitizens();
+        const updated = list.filter((a) => a.mobile !== user.mobile && a.id !== user.id);
+        await FileSystem.writeAsStringAsync(REGISTERED_ACCOUNTS_FILE_PATH, JSON.stringify(updated));
+      } catch (err) {
+        console.warn("Failed to remove stored citizen:", err);
+      }
+    }
+
+    // Clear active user session
+    await this.clearUserSession();
+
+    return {
+      success: true,
+      status: 200,
+      message: "आपले खाते आणि सर्व माहिती कायमस्वरूपी हटवण्यात आली आहे.",
+    };
   }
 }
 

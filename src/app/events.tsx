@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -14,89 +14,44 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Icon } from "react-native-paper";
 
-interface EventItem {
-  id: string;
-  day: string;
-  month: string;
-  title: string;
-  location: string;
-  time: string;
-  image: any;
-}
-
-const UPCOMING_EVENTS: EventItem[] = [
-  {
-    id: "ev-1",
-    day: "25",
-    month: "सप्टेंबर",
-    title: "जिल्हा जनसंवाद सभा",
-    location: "कृषी उत्पन्न बाजार समिती, औरंगाबाद",
-    time: "सायं 05:00 वाजता",
-    image: require("../../assets/images/event_thumb_1.jpg"),
-  },
-  {
-    id: "ev-2",
-    day: "02",
-    month: "ऑक्टोबर",
-    title: "स्वच्छता अभियान",
-    location: "एमआयडीसी परिसर",
-    time: "सकाळी 08:00 वाजता",
-    image: require("../../assets/images/event_thumb_2.jpg"),
-  },
-  {
-    id: "ev-3",
-    day: "12",
-    month: "ऑक्टोबर",
-    title: "युवा संवाद मेळावा",
-    location: "डॉ. बाबासाहेब आंबेडकर सभागृह",
-    time: "सायं 04:00 वाजता",
-    image: require("../../assets/images/event_thumb_3.jpg"),
-  },
-  {
-    id: "ev-4",
-    day: "20",
-    month: "ऑक्टोबर",
-    title: "महिला सक्षमीकरण परिषद",
-    location: "औरंगाबाद क्लब",
-    time: "सायं 03:00 वाजता",
-    image: require("../../assets/images/event_thumb_4.jpg"),
-  },
-];
-
-const PAST_EVENTS: EventItem[] = [
-  {
-    id: "ev-past-1",
-    day: "15",
-    month: "ऑगस्ट",
-    title: "स्वातंत्र्य दिन ध्वजारोहण व मेळावा",
-    location: "जिल्हाधिकारी कार्यालय मैदान",
-    time: "सकाळी 09:00 वाजता",
-    image: require("../../assets/images/event_thumb_1.jpg"),
-  },
-  {
-    id: "ev-past-2",
-    day: "01",
-    month: "ऑगस्ट",
-    title: "लोकमान्य टिळक पुण्यतिथी व विचारमंथन",
-    location: "टिळक स्मारक मंदिर",
-    time: "सकाळी 10:30 वाजता",
-    image: require("../../assets/images/event_thumb_2.jpg"),
-  },
-];
+import { appConfigApi, EventItem } from "../services/appConfigApi";
 
 export default function EventsScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const loadEvents = useCallback(async () => {
+    try {
+      const res = await appConfigApi.getEvents();
+      if (res && Array.isArray(res)) {
+        setEvents(res);
+      }
+    } catch (e) {
+      console.log("Error loading events:", e);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  }, []);
+    loadEvents();
+  }, [loadEvents]);
 
-  const eventsList = activeTab === "upcoming" ? UPCOMING_EVENTS : PAST_EVENTS;
+  const eventsList = useMemo(() => {
+    if (!Array.isArray(events)) return [];
+    return activeTab === "upcoming"
+      ? events.filter((e) => e.isUpcoming !== false)
+      : events.filter((e) => e.isUpcoming === false);
+  }, [events, activeTab]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
@@ -184,60 +139,60 @@ export default function EventsScreen() {
           />
         }
       >
-        {eventsList.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.eventCard}
-            onPress={() =>
-              router.push({
-                pathname: "/event-detail",
-                params: { id: item.id, title: item.title },
-              })
-            }
-            activeOpacity={0.88}
-          >
-            {/* Left Big Date Block */}
-            <View style={styles.dateBlock}>
-              <Text style={styles.dayText}>{item.day}</Text>
-              <Text style={styles.monthText}>{item.month}</Text>
-            </View>
+        {eventsList.length === 0 ? (
+          <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 20 }}>
+            <Icon source="calendar-blank-outline" size={48} color="#D1D5DB" />
+            <Text style={{ marginTop: 12, fontSize: 15, fontWeight: "700", color: "#6B7280", textAlign: "center" }}>
+              सध्या कोणतेही {activeTab === "upcoming" ? "आगामी" : "भूतकाळातील"} कार्यक्रम उपलब्ध नाहीत.
+            </Text>
+          </View>
+        ) : (
+          eventsList.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.eventCard}
+              onPress={() =>
+                router.push({
+                  pathname: "/event-detail",
+                  params: { id: item.id, title: item.title },
+                })
+              }
+              activeOpacity={0.88}
+            >
+              {/* Left Big Date Block */}
+              <View style={styles.dateBlock}>
+                <Text style={styles.dayText}>{item.day || "१"}</Text>
+                <Text style={styles.monthText}>{item.month || "महिना"}</Text>
+              </View>
 
-            {/* Thumbnail Image */}
-            <Image
-              source={item.image}
-              style={styles.eventThumb}
-              contentFit="cover"
-            />
+              {/* Thumbnail Image */}
+              <Image
+                source={item.image || require("../../assets/images/event_thumb_1.jpg")}
+                style={styles.eventThumb}
+                contentFit="cover"
+              />
 
-            {/* Right Details Column */}
-            <View style={styles.detailsCol}>
-              <Text style={styles.eventTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-
-              <View style={styles.metaRow}>
-                <Icon source="map-marker" size={13} color="#6B7280" />
-                <Text style={styles.metaText} numberOfLines={1}>
-                  {item.location}
+              {/* Right Details Column */}
+              <View style={styles.detailsCol}>
+                <Text style={styles.eventTitle} numberOfLines={1}>
+                  {item.title}
                 </Text>
-              </View>
 
-              <View style={styles.metaRow}>
-                <Icon source="clock-outline" size={13} color="#6B7280" />
-                <Text style={styles.metaText}>{item.time}</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+                <View style={styles.metaRow}>
+                  <Icon source="map-marker" size={13} color="#6B7280" />
+                  <Text style={styles.metaText} numberOfLines={1}>
+                    {item.location}
+                  </Text>
+                </View>
 
-        {/* View All Events Button */}
-        <TouchableOpacity
-          style={styles.viewAllBtn}
-          onPress={() => router.push("/event-detail")}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.viewAllBtnText}>सर्व कार्यक्रम पहा</Text>
-        </TouchableOpacity>
+                <View style={styles.metaRow}>
+                  <Icon source="clock-outline" size={13} color="#6B7280" />
+                  <Text style={styles.metaText}>{item.time}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );

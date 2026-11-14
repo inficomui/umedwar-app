@@ -2,22 +2,23 @@
   "expo": {
     "name": "सचिन मलिक - Sachin Malik",
     "slug": "sachin-malik",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sachin-malik",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.sachinmalik.app"
+      "bundleIdentifier": "com.misachinmalik"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
+      "versionCode": 4,
       "predictiveBackGestureEnabled": false,
-      "package": "com.sachinmalik.app",
+      "package": "com.misachinmalik",
       "googleServicesFile": "./google-services.json"
     },
     "web": {

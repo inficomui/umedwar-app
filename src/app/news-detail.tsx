@@ -9,6 +9,7 @@ import {
   StatusBar,
   Share,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -79,17 +80,17 @@ export default function NewsDetailScreen() {
             <Icon source="arrow-left" size={22} color="#E05300" />
           </TouchableOpacity>
           <View style={styles.headerTitleGroup}>
-            <Text style={styles.headerMainTitle}>बातमी तपशील</Text>
+            <Text style={styles.headerMainTitle}>अद्यतन तपशील</Text>
           </View>
           <View style={{ width: 36 }} />
         </View>
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24 }}>
-          <Icon source="newspaper-variant-outline" size={56} color="#D1D5DB" />
+          <Icon source="bullhorn-outline" size={56} color="#D1D5DB" />
           <Text style={{ fontSize: 17, fontWeight: "700", color: "#374151", marginTop: 16 }}>
-            बातमी आढळली नाही
+            अद्यतन आढळले नाही
           </Text>
           <Text style={{ fontSize: 13, color: "#6B7280", marginTop: 6, textAlign: "center" }}>
-            सध्या कोणतीही बातमी उपलब्ध नाही किंवा बातमी काढून टाकण्यात आली आहे.
+            सध्या कोणतेही अद्यतन उपलब्ध नाही किंवा अद्यतन काढून टाकण्यात आले आहे.
           </Text>
           <TouchableOpacity
             style={{
@@ -101,7 +102,7 @@ export default function NewsDetailScreen() {
             }}
             onPress={() => router.replace("/news")}
           >
-            <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>बातम्यांवर परत जा</Text>
+            <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>अद्यतनांवर परत जा</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -155,8 +156,8 @@ export default function NewsDetailScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerTitleGroup}>
-            <Text style={styles.headerMainTitle}>बातमी सविस्तर</Text>
-            <Text style={styles.headerSubtitle}>News Details</Text>
+            <Text style={styles.headerMainTitle}>अद्यतन सविस्तर</Text>
+            <Text style={styles.headerSubtitle}>Update Details</Text>
           </View>
         </View>
 
@@ -221,7 +222,7 @@ export default function NewsDetailScreen() {
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
               <Icon source="calendar-blank-outline" size={14} color="#E05300" />
-              <Text style={styles.metaText}>{article.date || "ताजी बातमी"}</Text>
+              <Text style={styles.metaText}>{article.date || "ताजे अद्यतन"}</Text>
             </View>
 
             <View style={styles.metaDivider} />
@@ -286,9 +287,53 @@ export default function NewsDetailScreen() {
             </View>
           )}
 
+          {/* Official Source & Government Information Attribution */}
+          <View style={styles.sourceBox}>
+            <View style={styles.sourceBoxHeader}>
+              <Icon source="certificate-outline" size={17} color="#EA580C" />
+              <Text style={styles.sourceBoxTitle}>माहिती स्रोत व संदर्भ (Source of Information)</Text>
+            </View>
+
+            <View style={styles.sourceMetaRow}>
+              <Text style={styles.sourceMetaLabel}>प्रसिद्धी / Publisher:</Text>
+              <Text style={styles.sourceMetaValue}>
+                {article.sourceName || "सचिन मलिक जनसंपर्क कार्यालय"}
+              </Text>
+            </View>
+
+            <View style={styles.sourceMetaRow}>
+              <Text style={styles.sourceMetaLabel}>तारीख / Published:</Text>
+              <Text style={styles.sourceMetaValue}>
+                {article.date || "ताजी घडामोड"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.sourceButton}
+              onPress={() => {
+                const targetUrl = article.sourceUrl || "https://www.maharashtra.gov.in";
+                Linking.openURL(targetUrl);
+              }}
+              activeOpacity={0.75}
+            >
+              <Icon source="link-variant" size={16} color="#FFFFFF" />
+              <Text style={styles.sourceButtonText}>
+                अधिकृत स्रोत / शासकीय पोर्टल पहा ({article.sourceUrl ? "मूळ लिंक" : "maharashtra.gov.in"})
+              </Text>
+              <Icon source="open-in-new" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <View style={styles.sourceDisclaimerNote}>
+              <Icon source="shield-alert-outline" size={14} color="#9A3412" />
+              <Text style={styles.sourceDisclaimerText}>
+                अस्वीकरण: हे ॲप किंवा सदर माहिती कोणत्याही सरकारी यंत्रणेचे अधिकृत प्रतिनिधित्व करत नाही. शासकीय योजना व विकासकामांची माहिती केवळ नागरिकांच्या माहितीसाठी अधिकृत सरकारी स्रोतांवरून सामायिक करण्यात आली आहे.
+              </Text>
+            </View>
+          </View>
+
           {/* Social Share Strip */}
           <View style={styles.shareStrip}>
-            <Text style={styles.shareLabel}>ही बातमी शेअर करा:</Text>
+            <Text style={styles.shareLabel}>हे अद्यतन शेअर करा:</Text>
             <View style={styles.shareButtonsRow}>
               {/* WhatsApp */}
               <TouchableOpacity
@@ -331,7 +376,7 @@ export default function NewsDetailScreen() {
           {/* Related News Section */}
           <View style={styles.relatedSection}>
             <View style={styles.relatedTitleRow}>
-              <Text style={styles.relatedSectionHeading}>इतर महत्त्वाच्या बातम्या</Text>
+              <Text style={styles.relatedSectionHeading}>इतर महत्त्वाची अद्यतने</Text>
               <View style={styles.titleBar} />
             </View>
 
@@ -359,7 +404,7 @@ export default function NewsDetailScreen() {
                     transition={200}
                   />
                   <View style={styles.relatedCardBody}>
-                    <Text style={styles.relatedCardDate}>{relItem.date || "ताजी बातमी"}</Text>
+                    <Text style={styles.relatedCardDate}>{relItem.date || "ताजे अद्यतन"}</Text>
                     <Text style={styles.relatedCardTitle} numberOfLines={2}>
                       {relItem.title}
                     </Text>
@@ -393,7 +438,7 @@ export default function NewsDetailScreen() {
           onPress={handleNextArticle}
           activeOpacity={0.85}
         >
-          <Text style={styles.nextArticleBtnText}>पुढील बातमी</Text>
+          <Text style={styles.nextArticleBtnText}>पुढील अद्यतन</Text>
           <Icon source="arrow-right" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -765,5 +810,82 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     color: "#FFFFFF",
+  },
+  sourceBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginVertical: 14,
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1.5 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  sourceBoxHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FFF7ED",
+    paddingBottom: 8,
+  },
+  sourceBoxTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#9A3412",
+  },
+  sourceMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  sourceMetaLabel: {
+    fontSize: 11.5,
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+  sourceMetaValue: {
+    fontSize: 12,
+    color: "#1F2937",
+    fontWeight: "700",
+  },
+  sourceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EA580C",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  sourceButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    textAlign: "center",
+  },
+  sourceDisclaimerNote: {
+    flexDirection: "row",
+    backgroundColor: "#FFFBEB",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
+    gap: 8,
+    alignItems: "flex-start",
+  },
+  sourceDisclaimerText: {
+    flex: 1,
+    fontSize: 10.5,
+    lineHeight: 15,
+    color: "#92400E",
   },
 });

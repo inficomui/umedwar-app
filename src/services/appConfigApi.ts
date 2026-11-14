@@ -332,6 +332,155 @@ class AppConfigApiService {
       return null;
     }
   }
+
+  /**
+   * Fetch Events list
+   * Endpoint: GET /api/v1/events
+   */
+  async getEvents(): Promise<EventItem[] | null> {
+    try {
+      const url = `${API_BASE_URL}/api/v1/events`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const json = await response.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        return json.data.map((item: any) => {
+          const rawImg = item.imageUrl || item.image_url || item.image;
+          return {
+            ...item,
+            image: typeof rawImg === "string" ? { uri: rawImg } : rawImg,
+          };
+        }) as EventItem[];
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetch Single Event by ID
+   * Endpoint: GET /api/v1/events/:id
+   */
+  async getEventById(id: string | number): Promise<EventItem | null> {
+    try {
+      const url = `${API_BASE_URL}/api/v1/events/${encodeURIComponent(String(id))}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const json = await response.json();
+      if (json && json.success && json.data) {
+        const item = json.data;
+        const rawImg = item.imageUrl || item.image_url || item.image;
+        return {
+          ...item,
+          image: typeof rawImg === "string" ? { uri: rawImg } : rawImg,
+        } as EventItem;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetch Documents list
+   * Endpoint: GET /api/v1/documents
+   */
+  async getDocuments(): Promise<DocumentItem[] | null> {
+    try {
+      const url = `${API_BASE_URL}/api/v1/documents`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const json = await response.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        return json.data as DocumentItem[];
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetch Video Gallery items
+   * Endpoint: GET /api/v1/videos
+   */
+  async getVideos(): Promise<any[] | null> {
+    try {
+      const url = `${API_BASE_URL}/api/v1/videos`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const json = await response.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        return json.data.map((item: any) => {
+          const rawThumb = item.thumbnail || item.thumbnailUrl || item.thumbnail_url;
+          return {
+            ...item,
+            thumbnail: typeof rawThumb === "string" ? { uri: rawThumb } : rawThumb,
+          };
+        });
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+export interface EventItem {
+  id: string | number;
+  day: string;
+  month: string;
+  title: string;
+  location: string;
+  time: string;
+  image?: any;
+  imageUrl?: string;
+  image_url?: string;
+  isUpcoming?: boolean;
+  date?: string;
+  description?: string;
+  fullDateText?: string;
+  organizer?: string;
+}
+
+export interface DocumentItem {
+  id: string | number;
+  category: "all" | "notice" | "scheme" | "pdf" | "other" | string;
+  title: string;
+  fileSize?: string;
+  file_size?: string;
+  fileUrl?: string;
+  file_url?: string;
+  description?: string;
 }
 
 export const appConfigApi = new AppConfigApiService();

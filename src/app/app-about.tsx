@@ -106,7 +106,7 @@ export default function AppAboutScreen() {
           <Text style={styles.partySloganSub}>{candidate.slogan} • {candidate.tagline}</Text>
 
           <View style={styles.versionBadge}>
-            <Text style={styles.versionText}>आवृत्ती 1.0.0</Text>
+            <Text style={styles.versionText}>आवृत्ती 1.0.3</Text>
           </View>
         </View>
 
@@ -115,6 +115,50 @@ export default function AppAboutScreen() {
           <Text style={styles.descText}>
             {candidate.name} ({candidate.constituency}) यांच्या अधिकृत ॲपच्या माध्यमातून नागरिक आणि जनप्रतिनिधी यांच्यात थेट संवाद साधण्यासाठी, परिसरातील विकासकामे व समस्यांवर तत्परतेने कार्यवाही करण्यासाठी हे ॲप विकसित करण्यात आले आहे.
           </Text>
+        </View>
+
+        {/* Government Disclaimer & Official Sources Card */}
+        <View style={styles.disclaimerCard}>
+          <View style={styles.disclaimerHeader}>
+            <Icon source="shield-alert-outline" size={20} color="#EA580C" />
+            <Text style={styles.disclaimerTitle}>शासकीय अस्वीकरण / Disclaimer</Text>
+          </View>
+          <Text style={styles.disclaimerText}>
+            हे ॲप्लिकेशन कोणत्याही शासकीय विभाग, संस्था किंवा सरकारी यंत्रणेचे प्रतिनिधित्व करत नाही. हे सचिन मलिक यांच्या जनसंपर्क कार्यालयाचे स्वतंत्र ॲप असून नागरिकांशी संवाद, नागरी समस्या नोंदणी आणि विकासकामांच्या माहितीसाठी विकसित केले आहे.
+          </Text>
+          <Text style={styles.disclaimerTextEn}>
+            This application does not represent any government entity. It is an independent platform managed by the office of Sachin Malik.
+          </Text>
+          <View style={styles.sourceSection}>
+            <Text style={styles.sourceSectionTitle}>शासकीय योजना व माहितीचे अधिकृत स्रोत (Official Sources):</Text>
+            <TouchableOpacity 
+              style={styles.sourceLinkRow} 
+              onPress={() => Linking.openURL("https://www.maharashtra.gov.in")}
+              activeOpacity={0.7}
+            >
+              <Icon source="web" size={15} color="#2563EB" />
+              <Text style={styles.sourceLinkText}>महाराष्ट्र शासन: maharashtra.gov.in</Text>
+              <Icon source="open-in-new" size={13} color="#2563EB" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.sourceLinkRow} 
+              onPress={() => Linking.openURL("https://www.india.gov.in")}
+              activeOpacity={0.7}
+            >
+              <Icon source="web" size={15} color="#2563EB" />
+              <Text style={styles.sourceLinkText}>भारत सरकार: india.gov.in</Text>
+              <Icon source="open-in-new" size={13} color="#2563EB" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.sourceLinkRow} 
+              onPress={() => Linking.openURL("https://aaplesarkar.mahaonline.gov.in")}
+              activeOpacity={0.7}
+            >
+              <Icon source="web" size={15} color="#2563EB" />
+              <Text style={styles.sourceLinkText}>आपले सरकार: aaplesarkar.mahaonline.gov.in</Text>
+              <Icon source="open-in-new" size={13} color="#2563EB" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Action Menu List */}
@@ -450,5 +494,69 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: "#1F2937",
+  },
+  disclaimerCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  disclaimerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  disclaimerTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#C2410C",
+  },
+  disclaimerText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#4B5563",
+    marginBottom: 6,
+  },
+  disclaimerTextEn: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#6B7280",
+    fontStyle: "italic",
+    marginBottom: 12,
+  },
+  sourceSection: {
+    backgroundColor: "#FFF7ED",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+  },
+  sourceSectionTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#9A3412",
+    marginBottom: 8,
+  },
+  sourceLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 5,
+    gap: 6,
+  },
+  sourceLinkText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#1D4ED8",
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
 });

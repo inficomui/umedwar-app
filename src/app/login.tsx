@@ -38,34 +38,38 @@ export default function LoginScreen() {
     }
   };
 
-  const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
   const [mobileOrEmail, setMobileOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-
-  // OTP Login Mode specific states
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
-  const [resendTimer, setResendTimer] = useState(30);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handlePasswordLogin = async () => {
+    setErrorMessage(null);
     const trimmedInput = mobileOrEmail.trim();
     if (!trimmedInput) {
-      toast.warning("कृपया आपला मोबाईल नंबर किंवा ईमेल प्रविष्ट करा.", "माहिती आवश्यक");
+      const err = "कृपया आपला मोबाईल नंबर किंवा ईमेल प्रविष्ट करा.";
+      setErrorMessage(err);
+      toast.warning(err, "माहिती आवश्यक");
       return;
     }
     if (trimmedInput.replace(/\D/g, "").length < 10 && !trimmedInput.includes("@")) {
-      toast.warning("कृपया वैध १० अंकी मोबाईल नंबर किंवा ईमेल टाका.", "अवैध माहिती");
+      const err = "कृपया वैध १० अंकी मोबाईल नंबर किंवा ईमेल टाका.";
+      setErrorMessage(err);
+      toast.warning(err, "अवैध माहिती");
       return;
     }
     if (!password.trim()) {
-      toast.warning("कृपया आपला पासवर्ड प्रविष्ट करा.", "पासवर्ड आवश्यक");
+      const err = "कृपया आपला पासवर्ड प्रविष्ट करा.";
+      setErrorMessage(err);
+      toast.warning(err, "पासवर्ड आवश्यक");
       return;
     }
     if (password.length < 6) {
-      toast.warning("पासवर्ड किमान ६ अक्षरांचा असणे आवश्यक आहे.", "लहान पासवर्ड");
+      const err = "पासवर्ड किमान ६ अक्षरांचा असणे आवश्यक आहे.";
+      setErrorMessage(err);
+      toast.warning(err, "लहान पासवर्ड");
       return;
     }
 
@@ -75,6 +79,7 @@ export default function LoginScreen() {
       setIsLoading(false);
 
       if (res.success && res.data) {
+        setErrorMessage(null);
         await login(res.data.user);
         toast.success(`स्वागत आहे, ${res.data.user.name}!`, "लॉगिन यशस्वी!");
         Alert.alert(
@@ -94,77 +99,17 @@ export default function LoginScreen() {
           ]
         );
       } else {
-        toast.error(res.error || "कृपया आपले क्रेडेंशियल्स तपासा.", "लॉगिन अयशस्वी");
+        const errorText = res.error || "चुकीचा मोबाईल नंबर किंवा पासवर्ड. कृपया पुन्हा प्रयत्न करा.";
+        setErrorMessage(errorText);
+        toast.error(errorText, "लॉगिन अयशस्वी");
+        Alert.alert("लॉगिन अयशस्वी", errorText);
       }
     } catch (err: any) {
       setIsLoading(false);
-      toast.error(err.message || "सर्व्हरशी संपर्क होऊ शकला नाही.", "सर्व्हर त्रुटी");
-    }
-  };
-
-  const handleSendLoginOtp = async () => {
-    const cleanMobile = mobileOrEmail.trim().replace(/\D/g, "");
-    if (cleanMobile.length < 10) {
-      toast.warning("कृपया वैध १० अंकी मोबाईल नंबर प्रविष्ट करा.", "मोबाईल नंबर आवश्यक");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await authApi.sendOtp(cleanMobile, "login");
-      setIsLoading(false);
-
-      if (res.success && res.data) {
-        setOtpSent(true);
-        const devHint = res.data.devOtpCode ? ` (डेमो OTP: ${res.data.devOtpCode})` : "";
-        toast.success(`${res.data.message}${devHint}`, "OTP पाठवला!");
-      } else {
-        toast.error(res.error || "OTP पाठवता आला नाही.", "सर्व्हर त्रुटी");
-      }
-    } catch (err: any) {
-      setIsLoading(false);
-      toast.error(err.message || "सर्व्हरशी संपर्क होऊ शकला नाही.", "सर्व्हर त्रुटी");
-    }
-  };
-
-  const handleOtpLogin = async () => {
-    const cleanMobile = mobileOrEmail.trim().replace(/\D/g, "");
-    const fullCode = otpCode.join("");
-    if (fullCode.length < 6) {
-      toast.warning("कृपया ६ अंकी OTP प्रविष्ट करा.", "अपूर्ण OTP");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await authApi.loginWithOtp(cleanMobile, fullCode);
-      setIsLoading(false);
-
-      if (res.success && res.data) {
-        await login(res.data.user);
-        toast.success(`स्वागत आहे, ${res.data.user.name}!`, "OTP लॉगिन यशस्वी!");
-        Alert.alert(
-          "OTP सत्यापित!",
-          `स्वागत आहे ${res.data.user.name}! ${candidate.name} यांच्या अधिकृत ॲपमध्ये आपले मनःपूर्वक स्वागत.`,
-          [
-            {
-              text: "पुढे जा",
-              onPress: () => {
-                if (returnTo) {
-                  router.replace(returnTo as any);
-                } else {
-                  router.replace("/home");
-                }
-              },
-            },
-          ]
-        );
-      } else {
-        toast.error(res.error || "चुकीचा OTP कोड. कृपया पुन्हा प्रयत्न करा.", "पडताळणी अयशस्वी");
-      }
-    } catch (err: any) {
-      setIsLoading(false);
-      toast.error(err.message || "सर्व्हरशी संपर्क होऊ शकला नाही.", "सर्व्हर त्रुटी");
+      const errorText = err.message || "सर्व्हरशी संपर्क होऊ शकला नाही. कृपया इंटरनेट कनेक्शन किंवा सर्व्हर तपासा.";
+      setErrorMessage(errorText);
+      toast.error(errorText, "सर्व्हर त्रुटी");
+      Alert.alert("सर्व्हर त्रुटी", errorText);
     }
   };
 
@@ -241,251 +186,112 @@ export default function LoginScreen() {
               </Text>
             </View>
 
-            {/* Method Tabs: Password vs OTP */}
-            <View style={styles.methodToggleContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.methodTab,
-                  loginMethod === "password" && styles.methodTabActive,
-                ]}
-                onPress={() => {
-                  setLoginMethod("password");
-                  setOtpSent(false);
-                }}
-                activeOpacity={0.8}
-              >
-                <Icon
-                  source="lock"
-                  size={18}
-                  color={loginMethod === "password" ? "#E05300" : "#6B7280"}
-                />
-                <Text
-                  style={[
-                    styles.methodTabText,
-                    loginMethod === "password" && styles.methodTabActiveText,
-                  ]}
-                >
-                  पासवर्ड द्वारे
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.methodTab,
-                  loginMethod === "otp" && styles.methodTabActive,
-                ]}
-                onPress={() => setLoginMethod("otp")}
-                activeOpacity={0.8}
-              >
-                <Icon
-                  source="cellphone-message"
-                  size={18}
-                  color={loginMethod === "otp" ? "#E05300" : "#6B7280"}
-                />
-                <Text
-                  style={[
-                    styles.methodTabText,
-                    loginMethod === "otp" && styles.methodTabActiveText,
-                  ]}
-                >
-                  OTP द्वारे
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* 1. PASSWORD LOGIN FORM */}
-            {loginMethod === "password" ? (
-              <View style={styles.formContainer}>
-                {/* Mobile or Email Field */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>मोबाईल नंबर किंवा ईमेल</Text>
-                  <View style={styles.inputWrapper}>
-                    <Icon source="account-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="उदा. 9876543210 किंवा ईमेल"
-                      placeholderTextColor="#9CA3AF"
-                      value={mobileOrEmail}
-                      onChangeText={setMobileOrEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-                  </View>
+            {/* Prominent Error Alert Banner */}
+            {errorMessage ? (
+              <View style={styles.errorAlertBanner}>
+                <View style={styles.errorAlertIconWrap}>
+                  <Icon source="alert-circle" size={20} color="#DC2626" />
                 </View>
-
-                {/* Password Field */}
-                <View style={styles.inputGroup}>
-                  <View style={styles.passwordLabelRow}>
-                    <Text style={styles.inputLabel}>पासवर्ड</Text>
-                    <TouchableOpacity
-                      onPress={() => router.push("/forgot-password")}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.forgotPasswordLink}>पासवर्ड विसरलात?</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.inputWrapper}>
-                    <Icon source="lock-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="आपला गुप्त पासवर्ड प्रविष्ट करा"
-                      placeholderTextColor="#9CA3AF"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry={!showPassword}
-                    />
-                    <TouchableOpacity
-                      onPress={() => setShowPassword(!showPassword)}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Icon
-                        source={showPassword ? "eye-off-outline" : "eye-outline"}
-                        size={20}
-                        color="#6B7280"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Remember Me Checkbox Row */}
+                <Text style={styles.errorAlertText}>{errorMessage}</Text>
                 <TouchableOpacity
-                  style={styles.rememberRow}
-                  activeOpacity={0.8}
-                  onPress={() => setRememberMe(!rememberMe)}
+                  onPress={() => setErrorMessage(null)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
-                    {rememberMe && <Icon source="check" size={14} color="#FFFFFF" />}
-                  </View>
-                  <Text style={styles.rememberText}>लॉगिन लक्षात ठेवा</Text>
-                </TouchableOpacity>
-
-                {/* Submit Login Button */}
-                <TouchableOpacity
-                  style={styles.primaryBtn}
-                  activeOpacity={0.85}
-                  onPress={handlePasswordLogin}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Text style={styles.primaryBtnText}>लॉगिन करा</Text>
-                      <Icon source="arrow-right" size={18} color="#FFFFFF" />
-                    </>
-                  )}
+                  <Icon source="close" size={16} color="#991B1B" />
                 </TouchableOpacity>
               </View>
-            ) : (
-              /* 2. OTP LOGIN FORM */
-              <View style={styles.formContainer}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>मोबाईल नंबर</Text>
-                  <View style={styles.inputWrapper}>
-                    <View style={styles.countryCodeBadge}>
-                      <Text style={styles.countryCodeText}>🇮🇳 +91</Text>
-                    </View>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="१० अंकी मोबाईल नंबर"
-                      placeholderTextColor="#9CA3AF"
-                      value={mobileOrEmail}
-                      onChangeText={(t) => setMobileOrEmail(t.replace(/\D/g, "").slice(0, 10))}
-                      keyboardType="phone-pad"
-                      maxLength={10}
-                      editable={!otpSent}
-                    />
-                    {otpSent && (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setOtpSent(false);
-                          setOtpCode(["", "", "", "", "", ""]);
-                        }}
-                      >
-                        <Text style={styles.changeMobileLink}>बदला</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+            ) : null}
+
+            {/* PASSWORD LOGIN FORM */}
+            <View style={styles.formContainer}>
+              {/* Mobile or Email Field */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>मोबाईल नंबर किंवा ईमेल</Text>
+                <View style={styles.inputWrapper}>
+                  <Icon source="account-outline" size={20} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="उदा. 9876543210 किंवा ईमेल"
+                    placeholderTextColor="#9CA3AF"
+                    value={mobileOrEmail}
+                    onChangeText={(val) => {
+                      setMobileOrEmail(val);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+
+              {/* Password Field */}
+              <View style={styles.inputGroup}>
+                <View style={styles.passwordLabelRow}>
+                  <Text style={styles.inputLabel}>पासवर्ड</Text>
+                  <TouchableOpacity
+                    onPress={() => router.push("/forgot-password")}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.forgotPasswordLink}>पासवर्ड विसरलात?</Text>
+                  </TouchableOpacity>
                 </View>
 
-                {!otpSent ? (
+                <View style={styles.inputWrapper}>
+                  <Icon source="lock-outline" size={20} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="आपला गुप्त पासवर्ड प्रविष्ट करा"
+                    placeholderTextColor="#9CA3AF"
+                    value={password}
+                    onChangeText={(val) => {
+                      setPassword(val);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    secureTextEntry={!showPassword}
+                  />
                   <TouchableOpacity
-                    style={styles.primaryBtn}
-                    activeOpacity={0.85}
-                    onPress={handleSendLoginOtp}
-                    disabled={isLoading}
+                    onPress={() => setShowPassword(!showPassword)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    {isLoading ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <>
-                        <Text style={styles.primaryBtnText}>OTP मिळवा</Text>
-                        <Icon source="message-arrow-right" size={18} color="#FFFFFF" />
-                      </>
-                    )}
+                    <Icon
+                      source={showPassword ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color="#6B7280"
+                    />
                   </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Remember Me Checkbox Row */}
+              <TouchableOpacity
+                style={styles.rememberRow}
+                activeOpacity={0.8}
+                onPress={() => setRememberMe(!rememberMe)}
+              >
+                <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
+                  {rememberMe && <Icon source="check" size={14} color="#FFFFFF" />}
+                </View>
+                <Text style={styles.rememberText}>लॉगिन लक्षात ठेवा</Text>
+              </TouchableOpacity>
+
+              {/* Submit Login Button */}
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                activeOpacity={0.85}
+                onPress={handlePasswordLogin}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    {/* OTP 6-Digit Entry */}
-                    <View style={styles.otpSection}>
-                      <Text style={styles.otpPromptText}>
-                        +91 {mobileOrEmail} वर पाठवलेला ६ अंकी कोड टाका
-                      </Text>
-
-                      <View style={styles.otpBoxesRow}>
-                        {otpCode.map((digit, idx) => (
-                          <TextInput
-                            key={idx.toString()}
-                            style={[
-                              styles.otpBox,
-                              digit ? styles.otpBoxFilled : null,
-                            ]}
-                            keyboardType="number-pad"
-                            maxLength={1}
-                            value={digit}
-                            onChangeText={(val) => {
-                              const newCode = [...otpCode];
-                              newCode[idx] = val;
-                              setOtpCode(newCode);
-                            }}
-                          />
-                        ))}
-                      </View>
-
-                      <View style={styles.otpResendRow}>
-                        <Text style={styles.resendTimerText}>
-                          पुन्हा कोड मागवा (३० सेकंदात)
-                        </Text>
-                        <TouchableOpacity
-                          onPress={handleSendLoginOtp}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.resendBtnText}>पुन्हा पाठवा</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.primaryBtn}
-                      activeOpacity={0.85}
-                      onPress={handleOtpLogin}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <>
-                          <Text style={styles.primaryBtnText}>OTP सत्यापित करून लॉगिन करा</Text>
-                          <Icon source="check-decagram" size={18} color="#FFFFFF" />
-                        </>
-                      )}
-                    </TouchableOpacity>
+                    <Text style={styles.primaryBtnText}>लॉगिन करा</Text>
+                    <Icon source="arrow-right" size={18} color="#FFFFFF" />
                   </>
                 )}
-              </View>
-            )}
+              </TouchableOpacity>
+            </View>
 
             {/* Divider */}
             <View style={styles.dividerRow}>
@@ -675,38 +481,33 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Method Toggle Tabs
-  methodToggleContainer: {
-    flexDirection: "row",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 20,
-  },
-  methodTab: {
-    flex: 1,
+  // Error Alert Banner
+  errorAlertBanner: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FCA5A5",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 16,
+    gap: 10,
+  },
+  errorAlertIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 10,
   },
-  methodTabActive: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  methodTabText: {
-    fontSize: 13,
+  errorAlertText: {
+    flex: 1,
+    fontSize: 13.5,
+    color: "#991B1B",
     fontWeight: "700",
-    color: "#6B7280",
-  },
-  methodTabActiveText: {
-    color: "#E05300",
+    lineHeight: 19,
   },
 
   // Form Fields

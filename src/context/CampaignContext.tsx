@@ -33,6 +33,7 @@ import {
   DEFAULT_ISSUES,
 } from "../services/issuesApi";
 import { authApi, UserProfile } from "../services/authApi";
+import { VideoService } from "../services/videoService";
 
 export type {
   JourneyMilestone,
@@ -235,167 +236,30 @@ const DEFAULT_QUOTE_CARD: QuoteCardInfo = {
   actionUrl: "/issues",
 };
 
-const DEFAULT_RESOLUTIONS: ResolutionItem[] = [
-  { id: "res-1", title: "२४ तास अखंड व शुद्ध पाणीपुरवठा", iconName: "water-pump" },
-  { id: "res-2", title: "खड्डेमुक्त रस्ते व काँक्रीटीकरण", iconName: "road-variant" },
-  { id: "res-3", title: "युवा रोजगार व कौशल्य विकास", iconName: "school" },
-  { id: "res-4", title: "शेतकरी बांधवांसाठी कृषी सहाय्य", iconName: "sprout" },
-];
+const DEFAULT_RESOLUTIONS: ResolutionItem[] = [];
 
 const DEFAULT_ABOUT_DETAILS: AboutCandidateData = {
   heroBannerUrl: undefined,
-  biography:
-    "मी जनतेच्या विश्वासातून, जनतेसाठी आणि जनतेबरोबर काम करण्याच्या उद्देशाने सार्वजनिक जीवनात प्रवेश केला. शिवसेना (शिंदे गट) या विचारधारेने प्रेरित होऊन, समाजाच्या सर्व स्तरांपर्यंत विकास पोहोचवणे हे माझे ध्येय आहे. शिक्षण, आरोग्य, पायाभूत सुविधा, युवकांना संधी आणि सर्वसमावेशक विकास या क्षेत्रांमध्ये सातत्याने काम करण्याचा माझा प्रयत्न आहे.",
-  politicalEntryYear: "2015",
-  missionStatement:
-    "प्रत्येक नागरिकाला विकासाच्या मुख्य प्रवाहात आणणे आणि सुशासन, सुविधा व संधी सर्वांपर्यंत पोहोचवणे.",
-  roleDescription:
-    "जनतेचे प्रश्न समजून घेणे, त्यावर कृती करणे आणि एक विकसित, सक्षम आणि प्रगत समाज घडवणे.",
-  quoteText: "माझं ध्येय – आपला विकास, आपला विश्वास !",
-  quoteAuthor: "श्री. सचिन मलिक",
-  milestones: [
-    {
-      id: "m-1",
-      year: "2015",
-      title: "सामाजिक व राजकीय जीवनाचा आरंभ",
-      subtitle: "युवक सक्षमीकरण व जनसेवा चळवळ",
-      description:
-        "कोपरगाव परिसरात स्थानिक युवकांच्या सहकार्याने विविध सामाजिक उपक्रम, आरोग्य शिबिरे व रक्तदान शिबिरांचे यशस्वी आयोजन.",
-      tag: "सुरवात",
-    },
-    {
-      id: "m-2",
-      year: "2018",
-      title: "शेतकरी व कामगार हक्क लढा",
-      subtitle: "सिंचन प्रश्न व कृषी बाजारपेठ सुधारणा",
-      description:
-        "दुष्काळग्रस्त भागातील शेतकऱ्यांसाठी सिंचन सुविधा व शेतमालाला योग्य भाव मिळवून देण्यासाठी भव्य शेतकरी मोर्चाचे नेतृत्व.",
-      tag: "आंदोलन",
-    },
-    {
-      id: "m-3",
-      year: "2021",
-      title: "कोविड मदत व आपत्कालीन आरोग्य मोहीम",
-      subtitle: "नागरिकांसाठी २४ तास तत्पर सेवा",
-      description:
-        "साथरोगाच्या कठीण काळात ५,००० हून अधिक गरजू कुटुंबांना धान्य वाटप, मोफत ऑक्सिजन कॉन्सन्ट्रेटर्स व आवश्यक औषधोपचार पुरवला.",
-      tag: "सेवाकार्य",
-    },
-    {
-      id: "m-4",
-      year: "2024",
-      title: "शिवसेना अधिकृत उमेदवारी व महासंकल्प",
-      subtitle: "कोपरगाव विधानसभा मतदारसंघाचा सर्वांगीण कायापालट",
-      description:
-        "आदरणीय मुख्यनेते ना. श्री. एकनाथजी शिंदे साहेबांच्या नेतृत्वाखाली कोपरगावच्या सर्वांगीण विकासासाठी शिवसेना अधिकृत उमेदवारी जाहीर.",
-      tag: "उमेदवारी",
-    },
-  ],
-  socialWorks: [
-    {
-      id: "sw-1",
-      title: "स्वच्छ व अखंड पाणीपुरवठा मोहीम",
-      category: "मूलभूत सुविधा",
-      description:
-        "शहरातील व ग्रामीण भागातील जलवाहिन्यांचे नूतनीकरण करून घराघरांपर्यंत शुद्ध पिण्याचे पाणी पोहोचवण्याचे महत्त्वपूर्ण काम.",
-      impactCount: "२५,०००+ लाभार्थी",
-      iconName: "water-pump",
-    },
-    {
-      id: "sw-2",
-      title: "युवा रोजगार व कौशल्य विकास केंद्र",
-      category: "युवा विकास",
-      description:
-        "स्थानिक तरुणांना औद्योगिक प्रशिक्षण, स्पर्धा परीक्षा मार्गदर्शन व थेट नोकरीच्या संधी उपलब्ध करून दिल्या.",
-      impactCount: "३,५००+ युवक",
-      iconName: "school",
-    },
-    {
-      id: "sw-3",
-      title: "महिला सक्षमीकरण व बचत गट सहाय्य",
-      category: "महिला कल्याण",
-      description:
-        "महिला बचत गटांना शून्य टक्के व्याजदर कर्ज मिळवून देणे व गृहउद्योगांसाठी विशेष प्रदर्शन केंद्रांची निर्मिती.",
-      impactCount: "१५०+ बचत गट",
-      iconName: "account-group",
-    },
-    {
-      id: "sw-4",
-      title: "मोफत आरोग्य शिबिरे व शस्त्रक्रिया मोहीम",
-      category: "आरोग्य सेवा",
-      description:
-        "ग्रामीण भागातील ज्येष्ठ नागरिकांसाठी नेत्र तपासणी, मोफत मोतीबिंदू शस्त्रक्रिया व आवश्यक औषधांचे वाटप.",
-      impactCount: "१२,०००+ नागरिक",
-      iconName: "hospital-box",
-    },
-  ],
+  biography: "",
+  politicalEntryYear: "",
+  missionStatement: "",
+  roleDescription: "",
+  quoteText: "",
+  quoteAuthor: "",
+  milestones: [],
+  socialWorks: [],
   socialLinks: {
-    facebook: "https://facebook.com/sachinmalikofficial",
-    instagram: "https://instagram.com/sachinmalikofficial",
-    twitter: "https://twitter.com/sachinmalik",
-    youtube: "https://youtube.com/@sachinmalik",
-    whatsapp: "https://wa.me/917387877820",
+    facebook: "",
+    instagram: "",
+    twitter: "",
+    youtube: "",
+    whatsapp: "",
   },
 };
 
-const DEFAULT_NEWS_ARTICLES: NewsArticleItem[] = (DEFAULT_NEWS as unknown as NewsArticleItem[]) || [];
+const DEFAULT_NEWS_ARTICLES: NewsArticleItem[] = [];
 
-export const DEFAULT_GALLERY_ITEMS: GalleryItem[] = [
-  {
-    id: "gal-1",
-    category: "events",
-    title: "कोपरगाव भव्य संकल्प सभा",
-    date: "१५ सप्टेंबर २०२६",
-    photoCount: 8,
-    image: require("../../assets/images/gallery_card_1.png"),
-    description: "मतदारसंघातील नागरिकांचा प्रचंड प्रतिसाद व जाहीर सभेचे क्षणचित्रे.",
-  },
-  {
-    id: "gal-2",
-    category: "dialogue",
-    title: "महिला बचत गट संवाद परिषद",
-    date: "१० सप्टेंबर २०२६",
-    photoCount: 12,
-    image: require("../../assets/images/gallery_card_2.png"),
-    description: "महिला भगिनींच्या विविध अडचणी समजून घेऊन त्यांना शासकीय योजनांचा लाभ देण्यावर चर्चा.",
-  },
-  {
-    id: "gal-3",
-    category: "meetings",
-    title: "ज्येष्ठ नागरिक व शेतकरी बांधव भेट",
-    date: "५ सप्टेंबर २०२६",
-    photoCount: 6,
-    image: require("../../assets/images/gallery_card_3.png"),
-    description: "गावपातळीवरील विकासकामे व शेती सिंचन प्रश्नांवर शेतकरी बांधवांशी चर्चा.",
-  },
-  {
-    id: "gal-4",
-    category: "events",
-    title: "युवा सक्षमीकरण व क्रीडा स्पर्धा",
-    date: "१ सप्टेंबर २०२६",
-    photoCount: 15,
-    image: require("../../assets/images/gallery_card_4.png"),
-    description: "स्थानिक खेळाडूंना प्रोत्साहन देण्यासाठी भव्य क्रीडा महोत्सवाचे आयोजन.",
-  },
-  {
-    id: "gal-5",
-    category: "media",
-    title: "पत्रकार परिषद व विकास आराखडा प्रकाशन",
-    date: "२५ ऑगस्ट २०२६",
-    photoCount: 5,
-    image: require("../../assets/images/gallery_card_5.png"),
-    description: "कोपरगाव मतदारसंघाच्या आगामी ५ वर्षांच्या विकास आराखड्याची माहिती प्रसारमाध्यमांना दिली.",
-  },
-  {
-    id: "gal-6",
-    category: "dialogue",
-    title: "नागरी समस्या निवारण बैठक",
-    date: "२० ऑगस्ट २०२६",
-    photoCount: 9,
-    image: require("../../assets/images/gallery_card_6.png"),
-    description: "वॉर्डनिहाय प्रत्यक्ष पाहणी करून पाणी, रस्ते व स्वच्छता समस्यांवर तातडीने तोडगा.",
-  },
-];
+export const DEFAULT_GALLERY_ITEMS: GalleryItem[] = [];
 
 const CampaignContext = createContext<CampaignContextType | undefined>(undefined);
 
@@ -407,7 +271,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
   const [quoteCard, setQuoteCard] = useState<QuoteCardInfo>(DEFAULT_QUOTE_CARD);
   const [carouselBanners, setCarouselBanners] = useState<CarouselBanner[]>(DEFAULT_BANNERS);
   const [customAdBanners] = useState<CustomAdBanner[]>(CUSTOM_AD_BANNERS);
-  const [videoGallery] = useState<VideoGalleryItem[]>(VIDEO_GALLERY_ITEMS);
+  const [videoGallery, setVideoGallery] = useState<VideoGalleryItem[]>(VIDEO_GALLERY_ITEMS);
   const [resolutions, setResolutions] = useState<ResolutionItem[]>(DEFAULT_RESOLUTIONS);
   const [aboutDetails, setAboutDetails] = useState<AboutCandidateData>(DEFAULT_ABOUT_DETAILS);
   const [newsArticles, setNewsArticles] = useState<NewsArticleItem[]>(DEFAULT_NEWS_ARTICLES);
@@ -535,7 +399,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
 
         if (res.data.news && res.data.news.length > 0) {
           const formatNewsDate = (rawDate?: string): string => {
-            if (!rawDate) return "ताजी बातमी";
+            if (!rawDate) return "ताजे अद्यतन";
             try {
               const d = new Date(rawDate);
               if (isNaN(d.getTime())) return rawDate;
@@ -577,7 +441,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
               ...item,
               id: String(item.id || idx + 1),
               category: mappedCat,
-              categoryName: item.categoryName || item.category || "बातम्या",
+              categoryName: item.categoryName || item.category || "अद्यतन",
               date: formattedDate,
               readTime: item.readTime || "२ मिनिटे वाचन",
               location: item.location || "कोपरगाव विधानसभा",
@@ -673,6 +537,33 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         // Keep current
+      }
+
+      // Sync videos on app startup
+      try {
+        console.log("🎥 [CampaignContext] Syncing videos on app launch...");
+        const vids = await VideoService.getVideos();
+        if (vids && vids.length > 0) {
+          console.log(`🎥 [CampaignContext] Successfully synced ${vids.length} videos from API into global state`);
+          const mappedVids: VideoGalleryItem[] = vids.map((v) => {
+            const rawThumb = v.thumbnailUrl || (v as any).thumbnail;
+            return {
+              id: String(v.id),
+              title: v.title,
+              category: v.category as any,
+              categoryName: v.categoryName || "व्हिडिओ",
+              date: v.date || "२०२६",
+              views: v.views || "१K+ Views",
+              duration: v.duration || "१०:००",
+              thumbnail: typeof rawThumb === "string" ? { uri: rawThumb } : (rawThumb || require("../../assets/images/banner_rally.jpg")),
+              videoUrl: v.videoUrl || (v as any).video_url || "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              description: v.description || "",
+            };
+          });
+          setVideoGallery(mappedVids);
+        }
+      } catch (err) {
+        console.warn("🎥 [CampaignContext] Video sync error:", err);
       }
     } catch {
       // Offline fallback already preset with DEFAULT values

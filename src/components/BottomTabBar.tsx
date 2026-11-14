@@ -34,10 +34,10 @@ const TABS: TabItemConfig[] = [
   },
   {
     key: "news",
-    label: "बातम्या",
+    label: "अद्यतन",
     route: "/news",
-    activeIcon: "newspaper-variant",
-    inactiveIcon: "newspaper-variant-outline",
+    activeIcon: "bullhorn",
+    inactiveIcon: "bullhorn-outline",
     iconSize: 23,
   },
   {

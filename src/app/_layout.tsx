@@ -71,6 +71,7 @@ export default function RootLayout() {
           <Stack.Screen name="settings" options={{ headerShown: false }} />
           <Stack.Screen name="app-about" options={{ headerShown: false }} />
           <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
+          <Stack.Screen name="delete-account" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ headerShown: false }} />

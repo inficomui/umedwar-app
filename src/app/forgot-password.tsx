@@ -91,8 +91,7 @@ export default function ForgotPasswordScreen() {
         setOtpValues(["", "", "", "", "", ""]);
         setCurrentStep(2);
 
-        const devHint = res.data.devOtpCode ? ` (डेमो OTP: ${res.data.devOtpCode})` : "";
-        toast.success(`${res.data.message}${devHint}`, "OTP पाठवला आहे!");
+        toast.success(res.data.message || "आपल्या मोबाईलवर OTP पाठवला आहे.", "OTP पाठवला आहे!");
       } else {
         toast.error(res.error || "OTP पाठवता आला नाही.", "सर्व्हर त्रुटी");
       }
@@ -131,8 +130,7 @@ export default function ForgotPasswordScreen() {
         setTimer(30);
         setCanResend(false);
         setOtpValues(["", "", "", "", "", ""]);
-        const devHint = res.data.devOtpCode ? ` (डेमो OTP: ${res.data.devOtpCode})` : "";
-        toast.success(`${res.data.message}${devHint}`, "OTP पुन्हा पाठवला!");
+        toast.success(res.data.message || "OTP पुन्हा पाठवला आहे.", "OTP पुन्हा पाठवला!");
       } else {
         toast.error(res.error || "OTP पाठवता आला नाही.", "सर्व्हर त्रुटी");
       }
@@ -392,13 +390,6 @@ export default function ForgotPasswordScreen() {
                     autoCapitalize="none"
                   />
                 </View>
-              </View>
-
-              <View style={styles.demoTipBox}>
-                <Icon source="information" size={16} color="#D97706" />
-                <Text style={styles.demoTipText}>
-                  परीक्षणासाठी कोणताही १० अंकी नंबर टाका (डेमो OTP: 123456).
-                </Text>
               </View>
 
               <TouchableOpacity
