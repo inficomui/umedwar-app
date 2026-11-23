@@ -3,13 +3,11 @@ import {
   StyleSheet,
   Text,
   View,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { Image } from "expo-image";
-import { Icon } from "react-native-paper";
 import { useRouter } from "expo-router";
 import {
   NewDevelopmentPlanService,
@@ -19,22 +17,43 @@ import {
 } from "../services/newDevelopmentPlanService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CARD_WIDTH = Math.min(SCREEN_WIDTH * 0.72, 280);
 
-function toMarathiDigits(num?: number | string): string {
-  if (num === undefined || num === null) return "";
-  const marathiDigits = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
-  return String(num)
-    .split("")
-    .map((d) => marathiDigits[parseInt(d, 10)] || d)
-    .join("");
+// Container layout metrics
+const CONTAINER_HORIZONTAL_MARGIN = 12;
+const CONTAINER_HORIZONTAL_PADDING = 16;
+const CARD_GAP = 8;
+
+// Available inner width for the cards
+const INNER_WIDTH = Math.max(
+  SCREEN_WIDTH - 2 * CONTAINER_HORIZONTAL_MARGIN - 2 * CONTAINER_HORIZONTAL_PADDING,
+  280
+);
+
+// Widths: 4 cards visible per row for sections with >2 cards; 2 cards for sections with <=2 cards
+const CARD_WIDTH_4 = Math.max(70, Math.floor((INNER_WIDTH - 3 * CARD_GAP) / 4));
+const CARD_WIDTH_2 = Math.floor((INNER_WIDTH - CARD_GAP) / 2);
+
+function getSectionBadgeText(sectionNumber: number, count: number): string {
+  if (sectionNumber === 1) return `${count} संकल्प`;
+  if (sectionNumber === 2) return `${count} सेवा / Cards`;
+  if (sectionNumber === 3) return `${count} विभाग`;
+  if (sectionNumber === 4) return `${count} विभाग`;
+  return `${count} उपक्रम`;
+}
+
+function getFormattedSectionTitle(sec: SectionItem, fallbackIdx: number): string {
+  const num = sec.section_number || fallbackIdx + 1;
+  const title = sec.title.trim();
+  if (/^\d+[\.\s]/.test(title)) {
+    return title;
+  }
+  return `${num}. ${title}`;
 }
 
 export function HomeDevelopmentPlanSection() {
   const router = useRouter();
   const [sections, setSections] = useState<SectionItem[]>([]);
   const [settings, setSettings] = useState<ModuleSettings | null>(null);
-  const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,8 +63,11 @@ export function HomeDevelopmentPlanSection() {
         if (!isMounted || !data) return;
         if (data.settings) setSettings(data.settings);
         if (data.sections && data.sections.length > 0) {
-          setSections(data.sections);
-          setSelectedSectionId(data.sections[0].id);
+          // Keep sections strictly ordered by section_number / display_order
+          const sorted = [...data.sections].sort(
+            (a, b) => (a.section_number || a.display_order) - (b.section_number || b.display_order)
+          );
+          setSections(sorted);
         }
       })
       .catch((err) => console.warn("Error loading dev plan overview:", err))
@@ -57,14 +79,6 @@ export function HomeDevelopmentPlanSection() {
       isMounted = false;
     };
   }, []);
-
-  const activeSection = sections.find((s) => s.id === selectedSectionId) || sections[0];
-  const initiatives: CardItem[] = activeSection?.initiatives || [];
-
-  const totalCardsCount = sections.reduce(
-    (acc, s) => acc + (s.total_cards_count || s.initiatives?.length || 0),
-    0
-  );
 
   if (loading && sections.length === 0) {
     return (
@@ -79,361 +93,198 @@ export function HomeDevelopmentPlanSection() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Section Header */}
-      <View style={styles.headerRow}>
-        <View style={styles.titleWithUnderline}>
-          <View style={styles.titleBadgeRow}>
-            <Text style={styles.sectionHeaderTitle}>
-              {settings?.title || "🎯 माझे प्रमुख संकल्प – माझा विकास आराखडा"}
-            </Text>
-          </View>
-          <Text style={styles.sectionSubtitle}>
-            {settings?.subtitle || "समृद्ध कोपरगाव – विकसित कोपरगाव"}
-          </Text>
-          <View style={styles.titleUnderline} />
-        </View>
-
-        <TouchableOpacity
-          style={styles.viewAllTopButton}
-          activeOpacity={0.8}
-          onPress={() => router.push("/resolutions")}
-        >
-          <Text style={styles.viewAllTopText}>सर्व पहा</Text>
-          <Icon source="arrow-right" size={15} color="#E05300" />
-        </TouchableOpacity>
+    <View style={styles.mainContainer}>
+      {/* Main Section Heading */}
+      <View style={styles.headerBlock}>
+        <Text style={styles.mainHeading}>
+          {settings?.title || "माझे प्रमुख संकल्प – माझा विकास आराखडा"}
+        </Text>
+        <Text style={styles.mainSubtitle}>
+          Paper Note मधील चार मुख्य विभागांचा क्रम कायम
+        </Text>
       </View>
 
-      {/* Section Navigation Tabs (Section 1, 2, 3, 4) */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabsScrollContent}
-      >
-        {sections.map((sec) => {
-          const isSelected = sec.id === selectedSectionId;
-          const count = sec.total_cards_count || sec.initiatives?.length || 0;
+      {/* 4 Vertically Arranged Sections */}
+      {sections.map((sec, secIdx) => {
+        const secNumber = sec.section_number || secIdx + 1;
+        const initiatives: CardItem[] = sec.initiatives || [];
+        const publishedCount = sec.total_cards_count || initiatives.length || 0;
+        const isTwoCards = initiatives.length <= 2;
+        const currentCardWidth = isTwoCards ? CARD_WIDTH_2 : CARD_WIDTH_4;
+        const badgeLabel = getSectionBadgeText(secNumber, publishedCount);
 
-          // Short label for tab
-          let shortLabel = sec.title;
-          if (sec.section_number === 1) shortLabel = "🎯 संकल्प";
-          else if (sec.section_number === 2) shortLabel = "🏛️ नागरी सेवा";
-          else if (sec.section_number === 3) shortLabel = "🎓 करिअर";
-          else if (sec.section_number === 4) shortLabel = "📑 योजना";
-
-          return (
-            <TouchableOpacity
-              key={sec.id}
-              style={[styles.tabButton, isSelected && styles.tabButtonActive]}
-              activeOpacity={0.85}
-              onPress={() => setSelectedSectionId(sec.id)}
-            >
-              <Text
-                style={[
-                  styles.tabButtonText,
-                  isSelected && styles.tabButtonTextActive,
-                ]}
-              >
-                {shortLabel} ({toMarathiDigits(count)})
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Cards Horizontal Slider */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.cardsScrollContent}
-        decelerationRate="fast"
-        snapToInterval={CARD_WIDTH + 14}
-      >
-        {initiatives.map((card, idx) => (
-          <TouchableOpacity
-            key={card.id || idx}
-            style={styles.cardItem}
-            activeOpacity={0.88}
-            onPress={() =>
-              router.push({
-                pathname: "/resolution-detail",
-                params: {
-                  id: String(card.id),
-                  slug: card.slug || String(card.id),
-                },
-              })
-            }
-          >
-            {/* Top Row: Icon Badge & Section Tag */}
-            <View style={styles.cardTopRow}>
-              <View style={styles.cardIconBadge}>
-                {card.image_url ? (
-                  <Image
-                    source={{ uri: card.image_url }}
-                    style={styles.cardImage}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <Text style={styles.cardEmojiIcon}>
-                    {card.icon || activeSection.icon || "🎯"}
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.cardNumberPill}>
-                <Text style={styles.cardNumberPillText}>
-                  #{toMarathiDigits(card.display_order || idx + 1)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Title */}
-            <Text style={styles.cardTitle} numberOfLines={2}>
-              {card.title}
+        return (
+          <View key={sec.id || sec.slug || secIdx} style={styles.sectionBlock}>
+            {/* Section Title */}
+            <Text style={styles.sectionTitle}>
+              {getFormattedSectionTitle(sec, secIdx)}
             </Text>
 
-            {/* Short Description */}
-            <Text style={styles.cardDescription} numberOfLines={2}>
-              {card.short_description || card.sankalp_text || "सविस्तर माहिती व विकास धोरण."}
-            </Text>
+            {/* Independent Horizontal Slider for each Section */}
+            {initiatives.length > 0 ? (
+              <FlatList
+                horizontal
+                data={initiatives}
+                keyExtractor={(card, cIdx) => String(card.id || card.slug || cIdx)}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.sliderContentContainer}
+                ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
+                renderItem={({ item: card, index: cardIdx }) => {
+                  const displayNum = card.display_order ?? (cardIdx + 1);
+                  return (
+                    <TouchableOpacity
+                      style={[styles.sliderCard, { width: currentCardWidth }]}
+                      activeOpacity={0.8}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/resolution-detail",
+                          params: {
+                            id: String(card.id),
+                            slug: card.slug || String(card.id),
+                          },
+                        })
+                      }
+                    >
+                      <Text style={styles.sliderCardNumber}>{displayNum}</Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            ) : (
+              <View style={styles.emptyCardRow}>
+                <Text style={styles.emptyCardText}>उपक्रम लवकरच उपलब्ध होतील.</Text>
+              </View>
+            )}
 
-            {/* Card Footer: Action Link */}
-            <View style={styles.cardFooter}>
-              <Text style={styles.cardFooterText}>सविस्तर माहिती</Text>
-              <View style={styles.cardFooterArrowWrap}>
-                <Icon source="arrow-right" size={14} color="#E05300" />
+            {/* Green Count Badge */}
+            <View style={styles.badgeContainer}>
+              <View style={styles.greenCountBadge}>
+                <Text style={styles.greenCountText}>{badgeLabel}</Text>
               </View>
             </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+          </View>
+        );
+      })}
 
-      {/* Bottom Full View All CTA Button */}
-      <View style={styles.bottomCtaContainer}>
-        <TouchableOpacity
-          style={styles.bottomCtaButton}
-          activeOpacity={0.85}
-          onPress={() => router.push("/resolutions")}
-        >
-          <Text style={styles.bottomCtaText}>
-            सर्व {toMarathiDigits(totalCardsCount || 57)} उपक्रम व नागरी सेवा पहा (View All)
-          </Text>
-          <Icon source="arrow-right-circle" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+      {/* Informational Footer Message */}
+      <View style={styles.footerBlock}>
+        <Text style={styles.footerText}>
+          ही रचना Paper Note च्या उपलब्ध माहितीवर आधारित आहे. अस्पष्ट हस्तलिखित उपशीर्षके Admin कडून भरता येतील.
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginVertical: 14,
-    backgroundColor: "#FFFFFF",
-    paddingTop: 16,
-    paddingBottom: 8,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: "#F3F4F6",
-  },
   loadingContainer: {
-    paddingVertical: 24,
+    marginVertical: 14,
+    marginHorizontal: CONTAINER_HORIZONTAL_MARGIN,
+    backgroundColor: "#0A0A0A",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#262626",
+    paddingVertical: 32,
     alignItems: "center",
     justifyContent: "center",
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  titleWithUnderline: {
-    flex: 1,
-    marginRight: 10,
-  },
-  titleBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sectionHeaderTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#1C1917",
-    letterSpacing: -0.2,
-  },
-  sectionSubtitle: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: "#78716C",
-    marginTop: 3,
-    lineHeight: 16,
-  },
-  titleUnderline: {
-    width: 44,
-    height: 3,
-    backgroundColor: "#E05300",
-    borderRadius: 2,
-    marginTop: 6,
-  },
-  viewAllTopButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  viewAllTopText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#E05300",
-  },
 
-  // Tabs
-  tabsScrollContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-    paddingBottom: 12,
-  },
-  tabButton: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#F5F5F4",
-    borderWidth: 1,
-    borderColor: "#E7E5E4",
-  },
-  tabButtonActive: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-  },
-  tabButtonText: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: "#57534E",
-  },
-  tabButtonTextActive: {
-    color: "#E05300",
-    fontWeight: "900",
-  },
-
-  // Cards
-  cardsScrollContent: {
-    paddingHorizontal: 16,
-    gap: 12,
-    paddingBottom: 14,
-  },
-  cardItem: {
-    width: CARD_WIDTH,
-    backgroundColor: "#FFFFFF",
+  // 1. Main Section Container (Full-width / padded dark container)
+  mainContainer: {
+    marginVertical: 14,
+    marginHorizontal: CONTAINER_HORIZONTAL_MARGIN,
+    backgroundColor: "#000000",
     borderRadius: 16,
-    padding: 15,
-    borderWidth: 1.5,
-    borderColor: "#FED7AA",
-    shadowColor: "#E05300",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    elevation: 2,
-    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#262626",
+    padding: CONTAINER_HORIZONTAL_PADDING,
   },
-  cardTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+
+  // 2. Main Heading Block
+  headerBlock: {
+    marginBottom: 20,
+  },
+  mainHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    lineHeight: 25,
+    marginBottom: 4,
+  },
+  mainSubtitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#9CA3AF",
+    lineHeight: 18,
+  },
+
+  // 3 & 6. Section Block & Spacing
+  sectionBlock: {
+    marginBottom: 22,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    lineHeight: 22,
     marginBottom: 10,
   },
-  cardIconBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: "#FFF7ED",
-    borderWidth: 1.5,
-    borderColor: "#FED7AA",
-    justifyContent: "center",
-    alignItems: "center",
+
+  // 4. Horizontal Slider & Cards
+  sliderContentContainer: {
+    paddingVertical: 2,
   },
-  cardImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 10,
-  },
-  cardEmojiIcon: {
-    fontSize: 22,
-  },
-  cardNumberPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    backgroundColor: "#FAFAF9",
+  sliderCard: {
+    height: 52,
+    backgroundColor: "#2E3035",
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E7E5E4",
-  },
-  cardNumberPillText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#78716C",
-  },
-  cardTitle: {
-    fontSize: 14.5,
-    fontWeight: "900",
-    color: "#1C1917",
-    lineHeight: 20,
-    minHeight: 40,
-    marginBottom: 6,
-  },
-  cardDescription: {
-    fontSize: 12.5,
-    fontWeight: "500",
-    color: "#57534E",
-    lineHeight: 18,
-    minHeight: 36,
-    marginBottom: 12,
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: "#FFF1E6",
-    paddingTop: 10,
-  },
-  cardFooterText: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    color: "#E05300",
-  },
-  cardFooterArrowWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#FFF7ED",
+    borderColor: "#3D4148",
     justifyContent: "center",
     alignItems: "center",
+  },
+  sliderCardNumber: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+  },
+  emptyCardRow: {
+    paddingVertical: 12,
+  },
+  emptyCardText: {
+    fontSize: 12,
+    color: "#71717A",
   },
 
-  // Bottom CTA
-  bottomCtaContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
+  // 5. Green Count Badge
+  badgeContainer: {
+    marginTop: 8,
+    alignItems: "flex-start",
   },
-  bottomCtaButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E05300",
+  greenCountBadge: {
+    backgroundColor: "#064E3B",
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 8,
-    shadowColor: "#E05300",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "#065F46",
   },
-  bottomCtaText: {
-    color: "#FFFFFF",
-    fontSize: 13.5,
-    fontWeight: "800",
+  greenCountText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#34D399",
+  },
+
+  // 8. Informational Footer Block
+  footerBlock: {
+    marginTop: 2,
+    paddingTop: 8,
+  },
+  footerText: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: "#9CA3AF",
+    lineHeight: 18,
   },
 });
