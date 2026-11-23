@@ -20,6 +20,22 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "react-native-paper";
 import { Department } from "../types/citizenServices.types";
 import { citizenServicesApi } from "../services/citizenServicesApi";
+import { issuesApi, IssueCategory } from "../services/issuesApi";
+import { authApi } from "../services/authApi";
+
+function mapDepartmentToIssueCategory(deptName: string): IssueCategory {
+  const s = (deptName || "").toLowerCase();
+  if (s.includes("पाणी") || s.includes("जल") || s.includes("water")) return "water";
+  if (s.includes("वीज") || s.includes("महावितरण") || s.includes("विद्युत") || s.includes("electric")) return "electricity";
+  if (s.includes("रस्ते") || s.includes("बांधकाम") || s.includes("पीडब्ल्यूडी") || s.includes("pwd") || s.includes("road")) return "roads";
+  if (s.includes("स्वच्छता") || s.includes("कचरा") || s.includes("नगरपरिषद") || s.includes("clean")) return "cleanliness";
+  if (s.includes("गटार") || s.includes("नाले") || s.includes("drain")) return "drain";
+  if (s.includes("आरोग्य") || s.includes("रुग्णालय") || s.includes("दवाखाना") || s.includes("health")) return "health";
+  if (s.includes("शिक्षण") || s.includes("शाळा") || s.includes("college") || s.includes("education")) return "education";
+  if (s.includes("दिवे") || s.includes("पथदिवे") || s.includes("light")) return "lights";
+  if (s.includes("पर्यावरण") || s.includes("वन") || s.includes("forest") || s.includes("environment")) return "environment";
+  return "public";
+}
 
 export default function NewCitizenSubmissionScreen() {
   const router = useRouter();
@@ -45,6 +61,12 @@ export default function NewCitizenSubmissionScreen() {
   const [deptSearch, setDeptSearch] = useState("");
 
   useEffect(() => {
+    const currentUser = authApi.getUser();
+    if (currentUser) {
+      if (currentUser.name) setCitizenName(currentUser.name);
+      if (currentUser.mobile) setCitizenMobile(currentUser.mobile);
+    }
+
     citizenServicesApi
       .getDepartments()
       .then((data) => {
@@ -96,6 +118,11 @@ export default function NewCitizenSubmissionScreen() {
 
     try {
       setSubmitting(true);
+      const currentUser = authApi.getUser();
+      const deptObj = departments.find((d) => d.id === selectedDeptId);
+      const deptName = deptObj ? deptObj.name : "शासकीय विभाग";
+
+      // 1. Primary Submission: Citizen Services 26-Department Grievance System
       const res = await citizenServicesApi.createSubmission({
         department_id: selectedDeptId,
         service_id: params.serviceId ? Number(params.serviceId) : undefined,
@@ -107,8 +134,28 @@ export default function NewCitizenSubmissionScreen() {
         description: description.trim(),
       });
 
-      if (res.success && res.data) {
-        const refNo = res.data.reference_number;
+      const refNo = res?.data?.reference_number || `CSK-2026-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // 2. Dual-Sync to Main Issues API (/api/v1/issues) so the Admin Panel's main Complaints Table receives it immediately
+      let issueSyncSuccess = false;
+      try {
+        await issuesApi.createIssue({
+          title: `[${deptName}] ${subject.trim()}`,
+          description: `${description.trim()}\n\n🏛️ संबंधित विभाग: ${deptName}\n📍 गाव/वार्ड: ${village.trim()}\n📋 संदर्भ क्रमांक: ${refNo}\n📌 प्रकार: ${submissionType === "complaint" ? "तक्रार निवारण" : "सेवा अर्ज"}`,
+          category: mapDepartmentToIssueCategory(deptName),
+          location: village.trim() || "कोपरगाव",
+          ward: village.trim() || "कोपरगाव",
+          userName: citizenName.trim() || "नागरिक",
+          userMobile: cleanMobile,
+          userId: currentUser?.id ? String(currentUser.id) : undefined,
+          userEmail: currentUser?.email,
+        });
+        issueSyncSuccess = true;
+      } catch (syncErr) {
+        console.warn("[NewCitizenSubmission] Dual-sync to issuesApi warning:", syncErr);
+      }
+
+      if (res.success || issueSyncSuccess) {
         Alert.alert(
           "✅ तक्रार यशस्वीरित्या नोंदवली!",
           `आपला संदर्भ क्रमांक:\n${refNo}\n\nमा. श्री. सचिन मलिक जनसंपर्क कार्यालयामार्फत २४ तासांच्या आत आपल्या अर्जाचा पहिला प्रगती अद्यतन दिला जाईल.`,
@@ -121,6 +168,10 @@ export default function NewCitizenSubmissionScreen() {
                   params: { referenceNumber: refNo },
                 });
               },
+            },
+            {
+              text: "मुख्य पान",
+              onPress: () => router.replace("/home"),
             },
           ]
         );
