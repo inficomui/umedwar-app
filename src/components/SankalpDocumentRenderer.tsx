@@ -1,5 +1,5 @@
-import React from "react";
-import { StyleSheet, Text, View, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { Icon } from "react-native-paper";
 
@@ -9,6 +9,61 @@ interface SankalpDocumentRendererProps {
 
 function stripTags(html: string): string {
   return html.replace(/<[^>]+>/g, "").trim();
+}
+
+const MARATHI_DIGITS = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
+function toMarathiDigits(n: number): string {
+  return String(n)
+    .split("")
+    .map((d) => MARATHI_DIGITS[parseInt(d, 10)] || d)
+    .join("");
+}
+
+interface ExpandableListBlockProps {
+  type: "ul" | "ol";
+  items: string[];
+}
+
+function ExpandableListBlock({ type, items }: ExpandableListBlockProps) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = expanded || items.length <= 3 ? items : items.slice(0, 3);
+  const hasMore = items.length > 3;
+
+  return (
+    <View style={styles.listContainer}>
+      {visibleItems.map((itemText, idx) => (
+        <View key={idx} style={styles.listItemRow}>
+          {type === "ul" ? (
+            <View style={styles.bulletDot} />
+          ) : (
+            <View style={styles.numberBadge}>
+              <Text style={styles.numberBadgeText}>{toMarathiDigits(idx + 1)}</Text>
+            </View>
+          )}
+          <Text style={styles.listItemText}>{itemText}</Text>
+        </View>
+      ))}
+
+      {hasMore && (
+        <TouchableOpacity
+          style={styles.readMoreListButton}
+          activeOpacity={0.8}
+          onPress={() => setExpanded(!expanded)}
+        >
+          <Text style={styles.readMoreListButtonText}>
+            {expanded
+              ? "कमी दाखवा"
+              : `अधिक वाचा (+${toMarathiDigits(items.length - 3)} आणखी मुद्दे)`}
+          </Text>
+          <Icon
+            source={expanded ? "chevron-up" : "chevron-down"}
+            size={16}
+            color="#EA580C"
+          />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 }
 
 /**
@@ -77,49 +132,18 @@ export function SankalpDocumentRenderer({
       }
     } else if (tagName === "ul") {
       const liMatches = innerContent.match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
-      if (liMatches.length > 0) {
+      const items = liMatches.map(stripTags).filter(Boolean);
+      if (items.length > 0) {
         blocks.push(
-          <View key={`ul-${keyIndex}`} style={styles.listContainer}>
-            {liMatches.map((li, liIdx) => {
-              const itemText = stripTags(li);
-              if (!itemText) return null;
-              return (
-                <View key={`li-${liIdx}`} style={styles.listItemRow}>
-                  <View style={styles.bulletDot} />
-                  <Text style={styles.listItemText}>{itemText}</Text>
-                </View>
-              );
-            })}
-          </View>
+          <ExpandableListBlock key={`ul-${keyIndex}`} type="ul" items={items} />
         );
       }
     } else if (tagName === "ol") {
       const liMatches = innerContent.match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
-      const marathiDigits = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
-      const toMarathi = (n: number) =>
-        String(n)
-          .split("")
-          .map((d) => marathiDigits[parseInt(d, 10)] || d)
-          .join("");
-
-      if (liMatches.length > 0) {
+      const items = liMatches.map(stripTags).filter(Boolean);
+      if (items.length > 0) {
         blocks.push(
-          <View key={`ol-${keyIndex}`} style={styles.listContainer}>
-            {liMatches.map((li, liIdx) => {
-              const itemText = stripTags(li);
-              if (!itemText) return null;
-              return (
-                <View key={`oli-${liIdx}`} style={styles.listItemRow}>
-                  <View style={styles.numberBadge}>
-                    <Text style={styles.numberBadgeText}>
-                      {toMarathi(liIdx + 1)}
-                    </Text>
-                  </View>
-                  <Text style={styles.listItemText}>{itemText}</Text>
-                </View>
-              );
-            })}
-          </View>
+          <ExpandableListBlock key={`ol-${keyIndex}`} type="ol" items={items} />
         );
       }
     } else if (tagName === "table") {
@@ -311,6 +335,24 @@ const styles = StyleSheet.create({
   },
   numberBadgeText: {
     fontSize: 11.5,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+  readMoreListButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    marginTop: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+  },
+  readMoreListButtonText: {
+    fontSize: 12.5,
     fontWeight: "800",
     color: "#EA580C",
   },

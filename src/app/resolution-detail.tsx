@@ -46,6 +46,7 @@ export default function ResolutionDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [cmsDetail, setCmsDetail] = useState<SankalpDetailItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [isPoliciesExpanded, setIsPoliciesExpanded] = useState(false);
 
   const targetKey = params.slug || params.id || "";
 
@@ -143,6 +144,16 @@ export default function ResolutionDetailScreen() {
     }
     return result;
   }, [resolution]);
+
+  // Show only 3 points initially unless expanded with "Read more"
+  const displayedPolicies = useMemo(() => {
+    if (isPoliciesExpanded || uniquePolicies.length <= 3) {
+      return uniquePolicies;
+    }
+    return uniquePolicies.slice(0, 3);
+  }, [uniquePolicies, isPoliciesExpanded]);
+
+  const hasMorePolicies = uniquePolicies.length > 3;
 
   const handleShare = async () => {
     if (!resolution) return;
@@ -333,7 +344,7 @@ export default function ResolutionDetailScreen() {
           </View>
         ) : null}
 
-        {/* Section 2: "माझे धोरण" (Point-to-Point Options - No Duplicates) */}
+        {/* Section 2: "माझे धोरण" (Point-to-Point Options - 3 Points Initial + Read More) */}
         {uniquePolicies.length > 0 && (
           <View style={styles.pointsCard}>
             <View style={styles.cardHeaderSmall}>
@@ -342,7 +353,7 @@ export default function ResolutionDetailScreen() {
             </View>
 
             <View style={styles.pointsList}>
-              {uniquePolicies.map((pointText, index) => (
+              {displayedPolicies.map((pointText, index) => (
                 <View key={index} style={styles.pointRow}>
                   <View style={styles.pointNumberBadge}>
                     <Text style={styles.pointNumberText}>
@@ -353,6 +364,25 @@ export default function ResolutionDetailScreen() {
                 </View>
               ))}
             </View>
+
+            {hasMorePolicies && (
+              <TouchableOpacity
+                style={styles.readMoreButton}
+                activeOpacity={0.8}
+                onPress={() => setIsPoliciesExpanded((prev) => !prev)}
+              >
+                <Text style={styles.readMoreButtonText}>
+                  {isPoliciesExpanded
+                    ? "कमी दाखवा"
+                    : `अधिक वाचा (+${toMarathiNumber(uniquePolicies.length - 3)} आणखी मुद्दे)`}
+                </Text>
+                <Icon
+                  source={isPoliciesExpanded ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#E05300"
+                />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -584,6 +614,24 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#292524",
     lineHeight: 21,
+  },
+  readMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+  },
+  readMoreButtonText: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#E05300",
   },
 
   // Action Plan Card
