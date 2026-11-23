@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
+  Platform,
 } from "react-native";
+import { Image } from "expo-image";
+import { Icon } from "react-native-paper";
 import { useRouter } from "expo-router";
 import {
   NewDevelopmentPlanService,
@@ -18,33 +21,32 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Container layout metrics
-const CONTAINER_HORIZONTAL_MARGIN = 12;
-const CONTAINER_HORIZONTAL_PADDING = 16;
-const CARD_GAP = 8;
+// Card dimensions for attractive, readable preview cards in horizontal slider
+const CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.68), 260);
+const CARD_GAP = 12;
 
-// Available inner width for the cards
-const INNER_WIDTH = Math.max(
-  SCREEN_WIDTH - 2 * CONTAINER_HORIZONTAL_MARGIN - 2 * CONTAINER_HORIZONTAL_PADDING,
-  280
-);
-
-// Widths: 4 cards visible per row for sections with >2 cards; 2 cards for sections with <=2 cards
-const CARD_WIDTH_4 = Math.max(70, Math.floor((INNER_WIDTH - 3 * CARD_GAP) / 4));
-const CARD_WIDTH_2 = Math.floor((INNER_WIDTH - CARD_GAP) / 2);
+function toMarathiDigits(num?: number | string): string {
+  if (num === undefined || num === null) return "";
+  const marathiDigits = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
+  return String(num)
+    .split("")
+    .map((d) => marathiDigits[parseInt(d, 10)] || d)
+    .join("");
+}
 
 function getSectionBadgeText(sectionNumber: number, count: number): string {
-  if (sectionNumber === 1) return `${count} संकल्प`;
-  if (sectionNumber === 2) return `${count} सेवा / Cards`;
-  if (sectionNumber === 3) return `${count} विभाग`;
-  if (sectionNumber === 4) return `${count} विभाग`;
-  return `${count} उपक्रम`;
+  const marathiCount = toMarathiDigits(count);
+  if (sectionNumber === 1) return `${marathiCount} संकल्प`;
+  if (sectionNumber === 2) return `${marathiCount} सेवा / Cards`;
+  if (sectionNumber === 3) return `${marathiCount} विभाग`;
+  if (sectionNumber === 4) return `${marathiCount} विभाग`;
+  return `${marathiCount} उपक्रम`;
 }
 
 function getFormattedSectionTitle(sec: SectionItem, fallbackIdx: number): string {
-  const num = sec.section_number || fallbackIdx + 1;
+  const num = toMarathiDigits(sec.section_number || fallbackIdx + 1);
   const title = sec.title.trim();
-  if (/^\d+[\.\s]/.test(title)) {
+  if (/^[\d\u0966-\u096F]+[\.\s]/.test(title)) {
     return title;
   }
   return `${num}. ${title}`;
@@ -63,7 +65,6 @@ export function HomeDevelopmentPlanSection() {
         if (!isMounted || !data) return;
         if (data.settings) setSettings(data.settings);
         if (data.sections && data.sections.length > 0) {
-          // Keep sections strictly ordered by section_number / display_order
           const sorted = [...data.sections].sort(
             (a, b) => (a.section_number || a.display_order) - (b.section_number || b.display_order)
           );
@@ -94,33 +95,45 @@ export function HomeDevelopmentPlanSection() {
 
   return (
     <View style={styles.mainContainer}>
-      {/* Main Section Heading */}
+      {/* Main Section Header with Saffron Brand Accent */}
       <View style={styles.headerBlock}>
-        <Text style={styles.mainHeading}>
-          {settings?.title || "माझे प्रमुख संकल्प – माझा विकास आराखडा"}
-        </Text>
-        <Text style={styles.mainSubtitle}>
-          Paper Note मधील चार मुख्य विभागांचा क्रम कायम
-        </Text>
+        <View style={styles.headerTitleRow}>
+          <View style={styles.accentBar} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.mainHeading}>
+              {settings?.title || "माझे प्रमुख संकल्प – माझा विकास आराखडा"}
+            </Text>
+            <Text style={styles.mainSubtitle}>
+              Paper Note मधील चार मुख्य विभागांचा क्रम कायम
+            </Text>
+          </View>
+        </View>
       </View>
 
-      {/* 4 Vertically Arranged Sections */}
+      {/* 4 Vertically Arranged Sections with Independent Sliders */}
       {sections.map((sec, secIdx) => {
         const secNumber = sec.section_number || secIdx + 1;
         const initiatives: CardItem[] = sec.initiatives || [];
         const publishedCount = sec.total_cards_count || initiatives.length || 0;
-        const isTwoCards = initiatives.length <= 2;
-        const currentCardWidth = isTwoCards ? CARD_WIDTH_2 : CARD_WIDTH_4;
         const badgeLabel = getSectionBadgeText(secNumber, publishedCount);
 
         return (
           <View key={sec.id || sec.slug || secIdx} style={styles.sectionBlock}>
-            {/* Section Title */}
-            <Text style={styles.sectionTitle}>
-              {getFormattedSectionTitle(sec, secIdx)}
-            </Text>
+            {/* Section Header Row with Title & Green Count Badge */}
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionTitleWrap}>
+                <Text style={styles.sectionTitle}>
+                  {getFormattedSectionTitle(sec, secIdx)}
+                </Text>
+              </View>
 
-            {/* Independent Horizontal Slider for each Section */}
+              <View style={styles.greenCountBadge}>
+                <Icon source="check-decagram" size={12} color="#059669" />
+                <Text style={styles.greenCountText}>{badgeLabel}</Text>
+              </View>
+            </View>
+
+            {/* Independent Horizontal Slider with Rich Attractive Cards */}
             {initiatives.length > 0 ? (
               <FlatList
                 horizontal
@@ -130,11 +143,17 @@ export function HomeDevelopmentPlanSection() {
                 contentContainerStyle={styles.sliderContentContainer}
                 ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
                 renderItem={({ item: card, index: cardIdx }) => {
-                  const displayNum = card.display_order ?? (cardIdx + 1);
+                  const displayNum = toMarathiDigits(card.display_order ?? (cardIdx + 1));
+                  const shortDesc =
+                    card.short_description ||
+                    card.sankalp_text ||
+                    card.service_details ||
+                    "सविस्तर माहिती व विकास आराखडा.";
+
                   return (
                     <TouchableOpacity
-                      style={[styles.sliderCard, { width: currentCardWidth }]}
-                      activeOpacity={0.8}
+                      style={styles.cardItem}
+                      activeOpacity={0.85}
                       onPress={() =>
                         router.push({
                           pathname: "/resolution-detail",
@@ -145,30 +164,61 @@ export function HomeDevelopmentPlanSection() {
                         })
                       }
                     >
-                      <Text style={styles.sliderCardNumber}>{displayNum}</Text>
+                      {/* Card Top Strip: Icon/Image + Number Badge */}
+                      <View style={styles.cardTopRow}>
+                        <View style={styles.cardIconWrap}>
+                          {card.image_url ? (
+                            <Image
+                              source={{ uri: card.image_url }}
+                              style={styles.cardImage}
+                              contentFit="cover"
+                            />
+                          ) : (
+                            <Text style={styles.cardEmoji}>
+                              {card.icon || sec.icon || "🎯"}
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={styles.cardNumberBadge}>
+                          <Text style={styles.cardNumberText}>#{displayNum}</Text>
+                        </View>
+                      </View>
+
+                      {/* Card Main Title */}
+                      <Text style={styles.cardTitle} numberOfLines={2}>
+                        {card.title}
+                      </Text>
+
+                      {/* Card Short Description */}
+                      <Text style={styles.cardDescription} numberOfLines={2}>
+                        {shortDesc}
+                      </Text>
+
+                      {/* Card Bottom CTA Link */}
+                      <View style={styles.cardBottomRow}>
+                        <Text style={styles.cardCtaText}>सविस्तर माहिती</Text>
+                        <View style={styles.arrowIconWrap}>
+                          <Icon source="arrow-right" size={13} color="#E05300" />
+                        </View>
+                      </View>
                     </TouchableOpacity>
                   );
                 }}
               />
             ) : (
               <View style={styles.emptyCardRow}>
-                <Text style={styles.emptyCardText}>उपक्रम लवकरच उपलब्ध होतील.</Text>
+                <Text style={styles.emptyCardText}>उपक्रम लवकरच प्रसिद्ध केले जातील.</Text>
               </View>
             )}
-
-            {/* Green Count Badge */}
-            <View style={styles.badgeContainer}>
-              <View style={styles.greenCountBadge}>
-                <Text style={styles.greenCountText}>{badgeLabel}</Text>
-              </View>
-            </View>
           </View>
         );
       })}
 
       {/* Informational Footer Message */}
-      <View style={styles.footerBlock}>
-        <Text style={styles.footerText}>
+      <View style={styles.footerNoteBox}>
+        <Icon source="information-outline" size={16} color="#78716C" />
+        <Text style={styles.footerNoteText}>
           ही रचना Paper Note च्या उपलब्ध माहितीवर आधारित आहे. अस्पष्ट हस्तलिखित उपशीर्षके Admin कडून भरता येतील.
         </Text>
       </View>
@@ -179,112 +229,219 @@ export function HomeDevelopmentPlanSection() {
 const styles = StyleSheet.create({
   loadingContainer: {
     marginVertical: 14,
-    marginHorizontal: CONTAINER_HORIZONTAL_MARGIN,
-    backgroundColor: "#0A0A0A",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#262626",
-    paddingVertical: 32,
+    paddingVertical: 24,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  // 1. Main Section Container (Full-width / padded dark container)
+  // 1. Clean, attractive light container
   mainContainer: {
-    marginVertical: 14,
-    marginHorizontal: CONTAINER_HORIZONTAL_MARGIN,
-    backgroundColor: "#000000",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#262626",
-    padding: CONTAINER_HORIZONTAL_PADDING,
+    marginVertical: 12,
+    backgroundColor: "#FDFCFB",
+    paddingTop: 16,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#F3F4F6",
   },
 
-  // 2. Main Heading Block
+  // 2. Main Header Block with Warm Saffron Accent
   headerBlock: {
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  accentBar: {
+    width: 4,
+    height: 42,
+    borderRadius: 2,
+    backgroundColor: "#E05300",
+    marginTop: 2,
   },
   mainHeading: {
     fontSize: 18,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    lineHeight: 25,
-    marginBottom: 4,
+    fontWeight: "900",
+    color: "#1C1917",
+    lineHeight: 24,
   },
   mainSubtitle: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#9CA3AF",
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#78716C",
     lineHeight: 18,
+    marginTop: 2,
   },
 
-  // 3 & 6. Section Block & Spacing
+  // 3. Section Block & Spacing
   sectionBlock: {
-    marginBottom: 22,
+    marginBottom: 20,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    gap: 10,
+  },
+  sectionTitleWrap: {
+    flex: 1,
   },
   sectionTitle: {
     fontSize: 15,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    lineHeight: 22,
-    marginBottom: 10,
+    fontWeight: "800",
+    color: "#1F2937",
+    lineHeight: 21,
   },
 
-  // 4. Horizontal Slider & Cards
-  sliderContentContainer: {
-    paddingVertical: 2,
+  // Green Count Badge (Attractive Pill)
+  greenCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECFDF5",
+    borderRadius: 14,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
   },
-  sliderCard: {
-    height: 52,
-    backgroundColor: "#2E3035",
+  greenCountText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#059669",
+  },
+
+  // 4. Horizontal Slider
+  sliderContentContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+
+  // Attractive Main Card Design
+  cardItem: {
+    width: CARD_WIDTH,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 13,
+    borderWidth: 1.2,
+    borderColor: "#FED7AA",
+    justifyContent: "space-between",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#E05300",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 2.5,
+      },
+    }),
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  cardIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#FFF7ED",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+  },
+  cardImage: {
+    width: 26,
+    height: 26,
+  },
+  cardEmoji: {
+    fontSize: 22,
+  },
+  cardNumberBadge: {
+    backgroundColor: "#FFF7ED",
+    paddingVertical: 3,
+    paddingHorizontal: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#3D4148",
+    borderColor: "#FED7AA",
+  },
+  cardNumberText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1C1917",
+    lineHeight: 20,
+    marginBottom: 6,
+  },
+  cardDescription: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#4B5563",
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  cardBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  cardCtaText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#E05300",
+  },
+  arrowIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FFF7ED",
     justifyContent: "center",
     alignItems: "center",
   },
-  sliderCardNumber: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    textAlign: "center",
-  },
   emptyCardRow: {
+    paddingHorizontal: 16,
     paddingVertical: 12,
   },
   emptyCardText: {
-    fontSize: 12,
-    color: "#71717A",
-  },
-
-  // 5. Green Count Badge
-  badgeContainer: {
-    marginTop: 8,
-    alignItems: "flex-start",
-  },
-  greenCountBadge: {
-    backgroundColor: "#064E3B",
-    borderRadius: 12,
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: "#065F46",
-  },
-  greenCountText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#34D399",
-  },
-
-  // 8. Informational Footer Block
-  footerBlock: {
-    marginTop: 2,
-    paddingTop: 8,
-  },
-  footerText: {
-    fontSize: 12,
-    fontWeight: "400",
+    fontSize: 12.5,
     color: "#9CA3AF",
-    lineHeight: 18,
+  },
+
+  // 8. Informational Footer Box
+  footerNoteBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F5F5F4",
+    marginHorizontal: 16,
+    marginTop: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E7E5E4",
+  },
+  footerNoteText: {
+    flex: 1,
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: "#78716C",
+    lineHeight: 16,
   },
 });
