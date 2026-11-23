@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -17,6 +17,12 @@ import { useRouter } from "expo-router";
 import { Icon } from "react-native-paper";
 import { useCampaign, ResolutionItem } from "../context/CampaignContext";
 import { MANIFESTO_INFO } from "../constants/campaignData";
+import {
+  NewDevelopmentPlanService,
+  NewDevelopmentPlanOverview,
+  SectionItem,
+  CardItem,
+} from "../services/newDevelopmentPlanService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -40,6 +46,21 @@ export default function ResolutionsScreen() {
   const [isVisionExpanded, setIsVisionExpanded] = useState(false);
   const [isPrinciplesExpanded, setIsPrinciplesExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [devPlanOverview, setDevPlanOverview] =
+    useState<NewDevelopmentPlanOverview | null>(null);
+  const [selectedSectionSlug, setSelectedSectionSlug] = useState<string>("all");
+
+  useEffect(() => {
+    let isMounted = true;
+    NewDevelopmentPlanService.getOverview()
+      .then((overview) => {
+        if (isMounted && overview) setDevPlanOverview(overview);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -47,12 +68,59 @@ export default function ResolutionsScreen() {
       if (refreshAppConfig) {
         await refreshAppConfig();
       }
+      const overview = await NewDevelopmentPlanService.getOverview();
+      if (overview) setDevPlanOverview(overview);
     } catch {
       // offline fallback
     } finally {
       setRefreshing(false);
     }
   }, [refreshAppConfig]);
+
+  const devPlanSections: SectionItem[] = devPlanOverview?.sections || [];
+  const allDevPlanCards: (CardItem & {
+    sectionTitle?: string;
+    sectionIcon?: string;
+  })[] = useMemo(() => {
+    if (!devPlanOverview?.sections) return [];
+    const list: (CardItem & {
+      sectionTitle?: string;
+      sectionIcon?: string;
+    })[] = [];
+    devPlanOverview.sections.forEach((sec) => {
+      (sec.initiatives || []).forEach((c) => {
+        list.push({
+          ...c,
+          sectionTitle: sec.title,
+          sectionIcon: sec.icon || "🎯",
+        });
+      });
+    });
+    return list;
+  }, [devPlanOverview]);
+
+  const hasDevPlanData = allDevPlanCards.length > 0;
+
+  const filteredDevPlanCards = useMemo(() => {
+    return allDevPlanCards.filter((card) => {
+      const matchesSection =
+        selectedSectionSlug === "all" ||
+        card.section?.slug === selectedSectionSlug ||
+        devPlanSections.find((s) => s.slug === selectedSectionSlug)?.id ===
+          card.section_id;
+
+      const query = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !query ||
+        card.title.toLowerCase().includes(query) ||
+        (card.short_description &&
+          card.short_description.toLowerCase().includes(query)) ||
+        (card.sankalp_text &&
+          card.sankalp_text.toLowerCase().includes(query));
+
+      return matchesSection && matchesSearch;
+    });
+  }, [allDevPlanCards, selectedSectionSlug, searchQuery, devPlanSections]);
 
   const allItems: ResolutionItem[] = resolutions || [];
 
@@ -65,7 +133,7 @@ export default function ResolutionsScreen() {
     return ["all", ...Array.from(set)];
   }, [allItems]);
 
-  // Filtered resolutions
+  // Filtered legacy resolutions
   const filteredResolutions = useMemo(() => {
     return allItems.filter((item) => {
       const matchesSearch =
@@ -180,8 +248,57 @@ export default function ResolutionsScreen() {
           )}
         </View>
 
-        {/* Category Filter Pills (if any categories available) */}
-        {categories.length > 2 && (
+        {/* Section Tabs / Category Filter Pills */}
+        {hasDevPlanData ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+          >
+            <TouchableOpacity
+              style={[
+                styles.categoryPill,
+                selectedSectionSlug === "all" && styles.categoryPillActive,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => setSelectedSectionSlug("all")}
+            >
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  selectedSectionSlug === "all" && styles.categoryPillTextActive,
+                ]}
+              >
+                सर्व ({toMarathiNumber(allDevPlanCards.length)})
+              </Text>
+            </TouchableOpacity>
+
+            {devPlanSections.map((sec) => {
+              const isSelected = selectedSectionSlug === sec.slug;
+              const count = sec.total_cards_count || sec.initiatives?.length || 0;
+              return (
+                <TouchableOpacity
+                  key={sec.slug}
+                  style={[
+                    styles.categoryPill,
+                    isSelected && styles.categoryPillActive,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() => setSelectedSectionSlug(sec.slug)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryPillText,
+                      isSelected && styles.categoryPillTextActive,
+                    ]}
+                  >
+                    {sec.icon || "🎯"} {sec.title.split("–")[0].trim()} ({toMarathiNumber(count)})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : categories.length > 2 ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -211,18 +328,121 @@ export default function ResolutionsScreen() {
               );
             })}
           </ScrollView>
-        )}
+        ) : null}
 
         {/* Total Count Header */}
         <View style={styles.countRow}>
           <Text style={styles.countText}>
-            एकूण {toMarathiNumber(filteredResolutions.length)} संकल्प उपलब्ध
+            एकूण{" "}
+            {toMarathiNumber(
+              hasDevPlanData
+                ? filteredDevPlanCards.length
+                : filteredResolutions.length
+            )}{" "}
+            उपक्रम व सेवा उपलब्ध
           </Text>
         </View>
 
         {/* Resolutions Cards List */}
         <View style={styles.resolutionsList}>
-          {filteredResolutions.length === 0 ? (
+          {hasDevPlanData ? (
+            filteredDevPlanCards.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Icon source="clipboard-text-outline" size={44} color="#D1D5DB" />
+                <Text style={styles.emptyTitle}>कोणतेही उपक्रम किंवा सेवा आढळल्या नाहीत</Text>
+                <Text style={styles.emptySubtitle}>कृपया वेगळा शब्द शोधून पहा.</Text>
+              </View>
+            ) : (
+              filteredDevPlanCards.map((item, index) => {
+                const policyCount = item.policies ? item.policies.length : 0;
+                const actionCount = item.actionPlans ? item.actionPlans.length : 0;
+
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.resolutionCard}
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/resolution-detail",
+                        params: {
+                          id: String(item.id),
+                          slug: item.slug || String(item.id),
+                        },
+                      })
+                    }
+                  >
+                    <View style={styles.cardHeaderRow}>
+                      <View style={styles.cardLogoWrap}>
+                        {item.image_url ? (
+                          <Image
+                            source={{ uri: item.image_url }}
+                            style={styles.cardLogoImage}
+                            contentFit="contain"
+                          />
+                        ) : item.icon ? (
+                          <Text style={{ fontSize: 24 }}>{item.icon}</Text>
+                        ) : (
+                          <Icon source="star" size={24} color="#E05300" />
+                        )}
+                      </View>
+
+                      <View style={styles.cardHeaderInfo}>
+                        <View style={styles.cardBadgeRow}>
+                          <View style={styles.cardNumberBadge}>
+                            <Text style={styles.cardNumberText}>
+                              {item.sectionTitle
+                                ? `${item.sectionIcon || "🎯"} ${item.sectionTitle.split("–")[0].trim()}`
+                                : `क्रमांक ${toMarathiNumber(index + 1)}`}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <Text style={styles.cardMainHeading} numberOfLines={2}>
+                          {item.title}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {item.short_description ? (
+                      <Text style={styles.cardStatement} numberOfLines={2}>
+                        {item.short_description}
+                      </Text>
+                    ) : item.sankalp_text ? (
+                      <Text style={styles.cardStatement} numberOfLines={2}>
+                        {item.sankalp_text}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.cardFooterRow}>
+                      {policyCount > 0 ? (
+                        <View style={styles.policyCountBadge}>
+                          <Icon source="format-list-checks" size={13} color="#C2410C" />
+                          <Text style={styles.policyCountText}>
+                            {toMarathiNumber(policyCount)} धोरणे
+                          </Text>
+                        </View>
+                      ) : actionCount > 0 ? (
+                        <View style={styles.policyCountBadge}>
+                          <Icon source="clock-fast" size={13} color="#C2410C" />
+                          <Text style={styles.policyCountText}>
+                            {toMarathiNumber(actionCount)} टप्पे
+                          </Text>
+                        </View>
+                      ) : (
+                        <View />
+                      )}
+
+                      <View style={styles.readMoreRow}>
+                        <Text style={styles.readMoreText}>सविस्तर वाचा</Text>
+                        <Icon source="arrow-right" size={14} color="#E05300" />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )
+          ) : filteredResolutions.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Icon source="clipboard-text-outline" size={44} color="#D1D5DB" />
               <Text style={styles.emptyTitle}>कोणतेही संकल्प उपलब्ध नाहीत</Text>

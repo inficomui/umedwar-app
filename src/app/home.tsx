@@ -23,6 +23,7 @@ import { Icon } from "react-native-paper";
 import { useCampaign, CarouselBanner } from "../context/CampaignContext";
 import { BottomTabBar } from "../components/BottomTabBar";
 import CitizenServicesQuickCard from "../components/home/CitizenServicesQuickCard";
+import { HomeDevelopmentPlanSection } from "../components/HomeDevelopmentPlanSection";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 // 1024 x 512 image aspect ratio (2:1)
@@ -323,66 +324,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Section: "माझे प्रमुख संकल्प" (Heading & Uploaded Logo Cards Slider) */}
-        {resolutions && resolutions.length > 0 && (
-          <View style={styles.resolutionsSection}>
-            <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16 }]}>
-              <View style={styles.titleWithUnderline}>
-                <Text style={styles.sectionTitle}>माझे प्रमुख संकल्प</Text>
-                <View style={styles.titleUnderline} />
-              </View>
 
-              <TouchableOpacity
-                style={styles.viewAllRow}
-                activeOpacity={0.75}
-                onPress={() => router.push("/resolutions")}
-              >
-                <Text style={styles.viewAllText}>सर्व पहा</Text>
-                <Icon source="arrow-right" size={15} color="#E05300" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Horizontal Slider of Resolution Cards */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.resolutionsSliderScroll}
-              decelerationRate="fast"
-            >
-              {resolutions.map((item) => (
-                <TouchableOpacity
-                  key={String(item.id)}
-                  style={styles.resolutionCard}
-                  activeOpacity={0.85}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/resolution-detail",
-                      params: {
-                        id: String(item.id),
-                        slug: item.slug || String(item.id),
-                      },
-                    })
-                  }
-                >
-                  <View style={styles.resolutionIconWrap}>
-                    {item.logoUrl ? (
-                      <Image
-                        source={{ uri: item.logoUrl }}
-                        style={styles.resolutionLogoImage}
-                        contentFit="contain"
-                      />
-                    ) : (
-                      <Icon source={item.iconName || "star"} size={28} color="#E05300" />
-                    )}
-                  </View>
-                  <Text style={styles.resolutionText} numberOfLines={2}>
-                    {item.shortTitle || item.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
 
         {/* Section: Custom Ads Banners ("विशेष जाहिराती व शासकीय योजना") */}
         {customAdBanners && customAdBanners.length > 0 && (
@@ -688,6 +630,10 @@ export default function HomeScreen() {
         {/* ════════════════════════════════════════════════════════ */}
         {/* Section: Citizen Services & Grievance Redressal (नागरिक सेवा व तक्रार कक्ष) */}
         <CitizenServicesQuickCard />
+
+        {/* ════════════════════════════════════════════════════════ */}
+        {/* Module: "माझे प्रमुख संकल्प – माझा विकास आराखडा" (All 4 Sections / 57 Cards) */}
+        <HomeDevelopmentPlanSection />
 
         {/* ════════════════════════════════════════════════════════ */}
         {/* Section: Quick Links Shortcuts */}

@@ -10,6 +10,8 @@ import {
   Share,
   RefreshControl,
   Platform,
+  Linking,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -19,6 +21,13 @@ import { useCampaign, ResolutionItem } from "../context/CampaignContext";
 import { enrichResolution } from "../constants/campaignData";
 import { sankalpApi, SankalpDetailItem } from "../services/sankalpApi";
 import { SankalpDocumentRenderer } from "../components/SankalpDocumentRenderer";
+import {
+  NewDevelopmentPlanService,
+  InitiativeDetailResponse,
+  CardItem,
+  PolicyPoint,
+  ActionPlanStep,
+} from "../services/newDevelopmentPlanService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -45,21 +54,28 @@ export default function ResolutionDetailScreen() {
   const { resolutions, candidate, refreshAppConfig } = useCampaign();
   const [refreshing, setRefreshing] = useState(false);
   const [cmsDetail, setCmsDetail] = useState<SankalpDetailItem | null>(null);
+  const [devPlanDetail, setDevPlanDetail] = useState<InitiativeDetailResponse | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [isPoliciesExpanded, setIsPoliciesExpanded] = useState(false);
 
   const targetKey = params.slug || params.id || "";
 
-  // Fetch full rich formatted document from CMS API GET /api/v1/sankalp/:slugOrId
+  // Fetch full rich formatted document & dev plan initiative detail
   useEffect(() => {
     let isMounted = true;
     if (targetKey) {
       setLoadingDetail(true);
-      sankalpApi
-        .getSankalpDetail(targetKey)
-        .then((detail) => {
-          if (isMounted && detail) {
-            setCmsDetail(detail);
+      Promise.allSettled([
+        NewDevelopmentPlanService.getInitiativeDetail(targetKey),
+        sankalpApi.getSankalpDetail(targetKey),
+      ])
+        .then(([planResult, sankalpResult]) => {
+          if (!isMounted) return;
+          if (planResult.status === "fulfilled" && planResult.value) {
+            setDevPlanDetail(planResult.value);
+          }
+          if (sankalpResult.status === "fulfilled" && sankalpResult.value) {
+            setCmsDetail(sankalpResult.value);
           }
         })
         .finally(() => {
@@ -78,8 +94,12 @@ export default function ResolutionDetailScreen() {
         await refreshAppConfig();
       }
       if (targetKey) {
-        const detail = await sankalpApi.getSankalpDetail(targetKey);
-        if (detail) setCmsDetail(detail);
+        const [planRes, sankalpRes] = await Promise.allSettled([
+          NewDevelopmentPlanService.getInitiativeDetail(targetKey),
+          sankalpApi.getSankalpDetail(targetKey),
+        ]);
+        if (planRes.status === "fulfilled" && planRes.value) setDevPlanDetail(planRes.value);
+        if (sankalpRes.status === "fulfilled" && sankalpRes.value) setCmsDetail(sankalpRes.value);
       }
     } catch {
       // offline fallback
@@ -90,7 +110,7 @@ export default function ResolutionDetailScreen() {
 
   const allResolutions: ResolutionItem[] = resolutions || [];
 
-  const resolution: ResolutionItem | null = useMemo(() => {
+  const legacyResolution: ResolutionItem | null = useMemo(() => {
     let rawItem =
       allResolutions.find((item) => String(item.slug || item.id) === String(targetKey)) ||
       allResolutions.find((item) => String(item.id) === String(targetKey)) ||
@@ -119,12 +139,14 @@ export default function ResolutionDetailScreen() {
     return null;
   }, [allResolutions, targetKey, cmsDetail]);
 
+  const initiative = devPlanDetail?.initiative;
+
   // Clean and deduplicate policy points so no repeated point is displayed
   const uniquePolicies = useMemo(() => {
-    let sourcePolicies = resolution?.policies;
+    let sourcePolicies = legacyResolution?.policies;
     if (!sourcePolicies || !Array.isArray(sourcePolicies) || sourcePolicies.length === 0) {
-      if (resolution?.fullDetails && typeof resolution.fullDetails === "string") {
-        sourcePolicies = resolution.fullDetails
+      if (legacyResolution?.fullDetails && typeof legacyResolution.fullDetails === "string") {
+        sourcePolicies = legacyResolution.fullDetails
           .split(/[,;\n।]+/)
           .map((s) => s.trim())
           .filter((s) => s.length > 3);
@@ -143,50 +165,96 @@ export default function ResolutionDetailScreen() {
       }
     }
     return result;
-  }, [resolution]);
+  }, [legacyResolution]);
+
+  const initiativePolicies: PolicyPoint[] = initiative?.policies || [];
+  const hasInitiativePolicies = initiativePolicies.length > 0;
 
   // Show only 3 points initially unless expanded with "Read more"
-  const displayedPolicies = useMemo(() => {
+  const displayedInitiativePolicies = useMemo(() => {
+    if (isPoliciesExpanded || initiativePolicies.length <= 3) {
+      return initiativePolicies;
+    }
+    return initiativePolicies.slice(0, 3);
+  }, [initiativePolicies, isPoliciesExpanded]);
+
+  const displayedLegacyPolicies = useMemo(() => {
     if (isPoliciesExpanded || uniquePolicies.length <= 3) {
       return uniquePolicies;
     }
     return uniquePolicies.slice(0, 3);
   }, [uniquePolicies, isPoliciesExpanded]);
 
-  const hasMorePolicies = uniquePolicies.length > 3;
+  const hasMorePolicies = hasInitiativePolicies
+    ? initiativePolicies.length > 3
+    : uniquePolicies.length > 3;
+
+  const totalPoliciesCount = hasInitiativePolicies
+    ? initiativePolicies.length
+    : uniquePolicies.length;
 
   const handleShare = async () => {
-    if (!resolution) return;
+    const title = initiative?.title || legacyResolution?.title || "संकल्प";
+    const statement = initiative?.sankalp_text || legacyResolution?.sankalpStatement || "";
+
+    let policiesText = "";
+    if (hasInitiativePolicies) {
+      policiesText =
+        `\n\n📋 *माझे धोरण:*\n` +
+        initiativePolicies
+          .map(
+            (p, idx) =>
+              `${toMarathiNumber(idx + 1)}. ${p.heading ? `*${p.heading}*: ` : ""}${p.description}`
+          )
+          .join("\n");
+    } else if (uniquePolicies.length > 0) {
+      policiesText =
+        `\n\n📋 *माझे धोरण:*\n` +
+        uniquePolicies
+          .map((p, idx) => `${toMarathiNumber(idx + 1)}. ${p}`)
+          .join("\n");
+    }
+
+    let actionText = "";
+    if (initiative?.actionPlans && initiative.actionPlans.length > 0) {
+      actionText =
+        `\n\n🎯 *कृती आराखडा:*\n` +
+        initiative.actionPlans
+          .map(
+            (a) =>
+              `• टप्पा ${toMarathiNumber(a.step_number)}: ${a.action_heading} - ${a.action_description}`
+          )
+          .join("\n");
+    } else if (legacyResolution?.actionPlan) {
+      actionText = `\n\n🎯 *कृती आराखडा:*\n${legacyResolution.actionPlan}`;
+    }
+
+    const shareMsg =
+      `🚩 *${candidate.name} – ${title}* 🚩\n\n` +
+      (statement ? `*माझा संकल्प:* ${statement}\n` : "") +
+      policiesText +
+      actionText +
+      `\n\n📲 *“मी सचिन मलिक” ॲप डाऊनलोड करा!*`;
+
     try {
-      const policiesText =
-        uniquePolicies.length > 0
-          ? `\n\n📋 *माझे धोरण:*\n` +
-            uniquePolicies
-              .map((p, idx) => `${toMarathiNumber(idx + 1)}. ${p}`)
-              .join("\n")
-          : "";
-
-      const actionText = resolution.actionPlan
-        ? `\n\n🎯 *कृती आराखडा:*\n${resolution.actionPlan}`
-        : "";
-
-      const shareMsg =
-        `🚩 *${candidate.name} – ${resolution.title}* 🚩\n\n` +
-        (resolution.sankalpStatement ? `*माझा संकल्प:* ${resolution.sankalpStatement}\n` : "") +
-        policiesText +
-        actionText +
-        `\n\n📲 *“मी सचिन मलिक” ॲप डाऊनलोड करा!*`;
-
       await Share.share({
         message: shareMsg,
-        title: resolution.title,
+        title,
       });
     } catch {
       // ignore
     }
   };
 
-  if (loadingDetail && !resolution) {
+  const handleCallOfficer = (phone?: string) => {
+    if (!phone) return;
+    const cleanPhone = phone.replace(/[^\d+]/g, "");
+    Linking.openURL(`tel:${cleanPhone}`).catch(() => {});
+  };
+
+  const isReady = !!(initiative || legacyResolution);
+
+  if (loadingDetail && !isReady) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
         <StatusBar barStyle="light-content" backgroundColor="#E05300" />
@@ -198,19 +266,19 @@ export default function ResolutionDetailScreen() {
           >
             <Icon source="arrow-left" size={22} color="#E05300" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>संकल्प तपशील</Text>
+          <Text style={styles.headerTitle}>संकल्प व सेवा तपशील</Text>
           <View style={{ width: 38 }} />
         </View>
 
         <View style={styles.emptyContainer}>
-          <Icon source="file-document-outline" size={54} color="#EA580C" />
+          <ActivityIndicator size="large" color="#E05300" />
           <Text style={styles.emptyTitle}>माहिती लोड होत आहे...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (!resolution) {
+  if (!isReady) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
         <StatusBar barStyle="light-content" backgroundColor="#E05300" />
@@ -222,13 +290,13 @@ export default function ResolutionDetailScreen() {
           >
             <Icon source="arrow-left" size={22} color="#E05300" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>संकल्प तपशील</Text>
+          <Text style={styles.headerTitle}>संकल्प व सेवा तपशील</Text>
           <View style={{ width: 38 }} />
         </View>
 
         <View style={styles.emptyContainer}>
           <Icon source="alert-circle-outline" size={54} color="#D1D5DB" />
-          <Text style={styles.emptyTitle}>हा संकल्प आढळला नाही किंवा अद्याप प्रसिद्ध झालेला नाही.</Text>
+          <Text style={styles.emptyTitle}>हा उपक्रम आढळला नाही किंवा अद्याप प्रसिद्ध झालेला नाही.</Text>
           <TouchableOpacity
             style={styles.emptyBackButton}
             onPress={() => router.replace("/home")}
@@ -240,6 +308,16 @@ export default function ResolutionDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  const activeTitle = initiative?.title || legacyResolution?.title || "संकल्प";
+  const activeSubtitle =
+    initiative?.short_description ||
+    legacyResolution?.subtitle ||
+    legacyResolution?.fullTitle;
+  const activeSankalpStatement =
+    initiative?.sankalp_text || legacyResolution?.sankalpStatement;
+  const activeLogoUrl = initiative?.image_url || legacyResolution?.logoUrl;
+  const activeIconEmoji = initiative?.icon;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
@@ -256,7 +334,9 @@ export default function ResolutionDetailScreen() {
           <Icon source="arrow-left" size={22} color="#E05300" />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>संकल्प तपशील</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {initiative?.section?.title || "संकल्प व सेवा तपशील"}
+        </Text>
 
         <TouchableOpacity
           style={styles.shareButton}
@@ -281,19 +361,29 @@ export default function ResolutionDetailScreen() {
           />
         }
       >
-        {/* Main Card: Uploaded Logo Image & Main Card Heading */}
+        {/* Main Card: Section Badge, Icon/Logo, and Main Heading */}
         <View style={styles.headerCard}>
-          {/* Logo Image (or Fallback Icon) */}
+          {initiative?.section && (
+            <View style={styles.sectionBadge}>
+              <Text style={styles.sectionBadgeText}>
+                {initiative.section.icon || "🎯"} {initiative.section.title}
+              </Text>
+            </View>
+          )}
+
+          {/* Logo Image or Emoji Icon */}
           <View style={styles.logoWrap}>
-            {resolution.logoUrl ? (
+            {activeLogoUrl ? (
               <Image
-                source={{ uri: resolution.logoUrl }}
+                source={{ uri: activeLogoUrl }}
                 style={styles.logoImage}
                 contentFit="contain"
               />
+            ) : activeIconEmoji ? (
+              <Text style={{ fontSize: 34 }}>{activeIconEmoji}</Text>
             ) : (
               <Icon
-                source={resolution.iconName || "star"}
+                source={legacyResolution?.iconName || "star"}
                 size={34}
                 color="#E05300"
               />
@@ -301,36 +391,34 @@ export default function ResolutionDetailScreen() {
           </View>
 
           {/* Main Card Heading */}
-          <Text style={styles.mainHeadingTitle}>{resolution.title}</Text>
+          <Text style={styles.mainHeadingTitle}>{activeTitle}</Text>
 
-          {resolution.fullTitle && resolution.fullTitle !== resolution.title ? (
-            <Text style={styles.fullTitleSubText}>{resolution.fullTitle}</Text>
+          {activeSubtitle && activeSubtitle !== activeTitle ? (
+            <Text style={styles.fullTitleSubText}>{activeSubtitle}</Text>
           ) : null}
 
-          {resolution.sankalpNumber ? (
+          {legacyResolution?.sankalpNumber ? (
             <View style={styles.numberBadge}>
               <Text style={styles.numberBadgeText}>
-                संकल्प क्रमांक {toMarathiNumber(resolution.sankalpNumber)}
+                संकल्प क्रमांक {toMarathiNumber(legacyResolution.sankalpNumber)}
               </Text>
             </View>
           ) : null}
         </View>
 
         {/* Section 1: "माझा संकल्प" (Statement) - if present */}
-        {resolution.sankalpStatement ? (
+        {activeSankalpStatement ? (
           <View style={styles.statementCard}>
             <View style={styles.cardHeaderSmall}>
               <Icon source="bullseye-arrow" size={18} color="#E05300" />
               <Text style={styles.cardHeaderSmallText}>माझा संकल्प</Text>
             </View>
-            <Text style={styles.statementText}>
-              {resolution.sankalpStatement}
-            </Text>
+            <Text style={styles.statementText}>{activeSankalpStatement}</Text>
           </View>
         ) : null}
 
-        {/* Dynamic Rich Document Content from CMS Word-style Editor */}
-        {(cmsDetail?.content || resolution.content) ? (
+        {/* Dynamic Rich Document Content from CMS Word-style Editor if available */}
+        {(cmsDetail?.content || legacyResolution?.content) ? (
           <View style={{ marginBottom: 16 }}>
             <View style={[styles.cardHeaderSmall, { marginBottom: 8 }]}>
               <Icon source="file-document-outline" size={18} color="#EA580C" />
@@ -339,13 +427,57 @@ export default function ResolutionDetailScreen() {
               </Text>
             </View>
             <SankalpDocumentRenderer
-              htmlContent={cmsDetail?.content || resolution.content || ""}
+              htmlContent={cmsDetail?.content || legacyResolution?.content || ""}
             />
           </View>
         ) : null}
 
         {/* Section 2: "माझे धोरण" (Point-to-Point Options - 3 Points Initial + Read More) */}
-        {uniquePolicies.length > 0 && (
+        {hasInitiativePolicies ? (
+          <View style={styles.pointsCard}>
+            <View style={styles.cardHeaderSmall}>
+              <Icon source="clipboard-text-outline" size={18} color="#E05300" />
+              <Text style={styles.cardHeaderSmallText}>माझे धोरण (प्रमुख धोरणे)</Text>
+            </View>
+
+            <View style={styles.pointsList}>
+              {displayedInitiativePolicies.map((point, index) => (
+                <View key={point.id || index} style={styles.policyCardRow}>
+                  <View style={styles.pointNumberBadge}>
+                    <Text style={styles.pointNumberText}>
+                      {toMarathiNumber(index + 1)}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {point.heading ? (
+                      <Text style={styles.policyHeadingText}>{point.heading}</Text>
+                    ) : null}
+                    <Text style={styles.policyDescText}>{point.description}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {hasMorePolicies && (
+              <TouchableOpacity
+                style={styles.readMoreButton}
+                activeOpacity={0.8}
+                onPress={() => setIsPoliciesExpanded((prev) => !prev)}
+              >
+                <Text style={styles.readMoreButtonText}>
+                  {isPoliciesExpanded
+                    ? "कमी दाखवा"
+                    : `अधिक वाचा (+${toMarathiNumber(totalPoliciesCount - 3)} आणखी धोरणे)`}
+                </Text>
+                <Icon
+                  source={isPoliciesExpanded ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#E05300"
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : uniquePolicies.length > 0 ? (
           <View style={styles.pointsCard}>
             <View style={styles.cardHeaderSmall}>
               <Icon source="clipboard-text-outline" size={18} color="#E05300" />
@@ -353,7 +485,7 @@ export default function ResolutionDetailScreen() {
             </View>
 
             <View style={styles.pointsList}>
-              {displayedPolicies.map((pointText, index) => (
+              {displayedLegacyPolicies.map((pointText, index) => (
                 <View key={index} style={styles.pointRow}>
                   <View style={styles.pointNumberBadge}>
                     <Text style={styles.pointNumberText}>
@@ -374,7 +506,7 @@ export default function ResolutionDetailScreen() {
                 <Text style={styles.readMoreButtonText}>
                   {isPoliciesExpanded
                     ? "कमी दाखवा"
-                    : `अधिक वाचा (+${toMarathiNumber(uniquePolicies.length - 3)} आणखी मुद्दे)`}
+                    : `अधिक वाचा (+${toMarathiNumber(totalPoliciesCount - 3)} आणखी मुद्दे)`}
                 </Text>
                 <Icon
                   source={isPoliciesExpanded ? "chevron-up" : "chevron-down"}
@@ -384,10 +516,34 @@ export default function ResolutionDetailScreen() {
               </TouchableOpacity>
             )}
           </View>
-        )}
+        ) : null}
 
-        {/* Section 3: "कृती आराखडा" (Action Plan) - if present */}
-        {resolution.actionPlan ? (
+        {/* Section 3: "कृती आराखडा" (Action Plan) */}
+        {initiative?.actionPlans && initiative.actionPlans.length > 0 ? (
+          <View style={styles.actionPlanCard}>
+            <View style={styles.cardHeaderSmall}>
+              <Icon source="clock-fast" size={18} color="#C2410C" />
+              <Text style={[styles.cardHeaderSmallText, { color: "#9A3412" }]}>
+                कृती आराखडा (टप्पे)
+              </Text>
+            </View>
+            <View style={styles.actionTimeline}>
+              {initiative.actionPlans.map((action, index) => (
+                <View key={action.id || index} style={styles.timelineItem}>
+                  <View style={styles.timelineStepBadge}>
+                    <Text style={styles.timelineStepText}>
+                      टप्पा {toMarathiNumber(action.step_number || index + 1)}
+                    </Text>
+                  </View>
+                  <View style={styles.timelineContentBox}>
+                    <Text style={styles.timelineHeadingText}>{action.action_heading}</Text>
+                    <Text style={styles.timelineDescText}>{action.action_description}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : legacyResolution?.actionPlan ? (
           <View style={styles.actionPlanCard}>
             <View style={styles.cardHeaderSmall}>
               <Icon source="clock-fast" size={18} color="#C2410C" />
@@ -395,7 +551,136 @@ export default function ResolutionDetailScreen() {
                 कृती आराखडा
               </Text>
             </View>
-            <Text style={styles.actionPlanText}>{resolution.actionPlan}</Text>
+            <Text style={styles.actionPlanText}>{legacyResolution.actionPlan}</Text>
+          </View>
+        ) : null}
+
+        {/* Section 4: Civic Services Specific Fields (नागरिक सेवा व तक्रार व्यवस्थापन) */}
+        {initiative?.service_details ? (
+          <View style={styles.serviceDetailsCard}>
+            <View style={styles.cardHeaderSmall}>
+              <Icon source="information-outline" size={18} color="#2563EB" />
+              <Text style={[styles.cardHeaderSmallText, { color: "#1D4ED8" }]}>
+                नागरी सेवा माहिती व स्वरूप
+              </Text>
+            </View>
+            <Text style={styles.serviceDetailsText}>{initiative.service_details}</Text>
+          </View>
+        ) : null}
+
+        {initiative?.required_documents && initiative.required_documents.length > 0 ? (
+          <View style={styles.documentsCard}>
+            <View style={styles.cardHeaderSmall}>
+              <Icon source="file-document-check-outline" size={18} color="#059669" />
+              <Text style={[styles.cardHeaderSmallText, { color: "#047857" }]}>
+                आवश्यक कागदपत्रे
+              </Text>
+            </View>
+            <View style={styles.documentList}>
+              {initiative.required_documents.map((doc, dIdx) => (
+                <View key={dIdx} style={styles.documentRow}>
+                  <Icon source="check-circle" size={16} color="#059669" />
+                  <Text style={styles.documentText}>{doc}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {initiative?.application_procedure ? (
+          <View style={styles.procedureCard}>
+            <View style={styles.cardHeaderSmall}>
+              <Icon source="format-list-checks" size={18} color="#7C3AED" />
+              <Text style={[styles.cardHeaderSmallText, { color: "#6D28D9" }]}>
+                अर्ज प्रक्रिया (अर्ज कसा करावा?)
+              </Text>
+            </View>
+            <Text style={styles.procedureText}>{initiative.application_procedure}</Text>
+          </View>
+        ) : null}
+
+        {initiative?.contact_info &&
+        (initiative.contact_info.officer || initiative.contact_info.phone) ? (
+          <View style={styles.contactCard}>
+            <View style={styles.cardHeaderSmall}>
+              <Icon source="card-account-phone-outline" size={18} color="#E05300" />
+              <Text style={styles.cardHeaderSmallText}>संपर्क अधिकारी व साहाय्यता</Text>
+            </View>
+            {initiative.contact_info.officer ? (
+              <Text style={styles.officerNameText}>
+                अधिकारी/कार्यालय: {initiative.contact_info.officer}
+              </Text>
+            ) : null}
+            {initiative.contact_info.phone ? (
+              <TouchableOpacity
+                style={styles.callOfficerButton}
+                activeOpacity={0.8}
+                onPress={() => handleCallOfficer(initiative.contact_info?.phone)}
+              >
+                <Icon source="phone" size={18} color="#FFFFFF" />
+                <Text style={styles.callOfficerButtonText}>
+                  कॉल करा: {initiative.contact_info.phone}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Previous & Next Initiative Navigation Bar */}
+        {devPlanDetail?.navigation &&
+        (devPlanDetail.navigation.previous || devPlanDetail.navigation.next) ? (
+          <View style={styles.navigationRow}>
+            {devPlanDetail.navigation.previous ? (
+              <TouchableOpacity
+                style={styles.navButton}
+                activeOpacity={0.8}
+                onPress={() =>
+                  router.push({
+                    pathname: "/resolution-detail",
+                    params: {
+                      slug: devPlanDetail.navigation.previous!.slug,
+                      id: String(devPlanDetail.navigation.previous!.id),
+                    },
+                  })
+                }
+              >
+                <Icon source="arrow-left" size={18} color="#E05300" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.navButtonSub}>मागील उपक्रम</Text>
+                  <Text style={styles.navButtonTitle} numberOfLines={1}>
+                    {devPlanDetail.navigation.previous.title}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
+
+            {devPlanDetail.navigation.next ? (
+              <TouchableOpacity
+                style={[styles.navButton, { alignItems: "flex-end" }]}
+                activeOpacity={0.8}
+                onPress={() =>
+                  router.push({
+                    pathname: "/resolution-detail",
+                    params: {
+                      slug: devPlanDetail.navigation.next!.slug,
+                      id: String(devPlanDetail.navigation.next!.id),
+                    },
+                  })
+                }
+              >
+                <View style={{ flex: 1, alignItems: "flex-end" }}>
+                  <Text style={styles.navButtonSub}>पुढील उपक्रम</Text>
+                  <Text style={styles.navButtonTitle} numberOfLines={1}>
+                    {devPlanDetail.navigation.next.title}
+                  </Text>
+                </View>
+                <Icon source="arrow-right" size={18} color="#E05300" />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
           </View>
         ) : null}
 
@@ -670,6 +955,209 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14.5,
     fontWeight: "800",
+  },
+
+  // Section Badge
+  sectionBadge: {
+    alignSelf: "center",
+    backgroundColor: "#FFF7ED",
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    marginBottom: 12,
+  },
+  sectionBadgeText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#C2410C",
+  },
+
+  // Policy Item (Rich with heading & description)
+  policyCardRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: "#FAFAF9",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#F5F5F4",
+  },
+  policyHeadingText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1C1917",
+    marginBottom: 3,
+  },
+  policyDescText: {
+    fontSize: 13.5,
+    fontWeight: "500",
+    color: "#44403C",
+    lineHeight: 20,
+  },
+
+  // Action Timeline
+  actionTimeline: {
+    gap: 12,
+  },
+  timelineItem: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+  },
+  timelineStepBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FFEDD5",
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  timelineStepText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#9A3412",
+  },
+  timelineContentBox: {},
+  timelineHeadingText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1C1917",
+    marginBottom: 4,
+  },
+  timelineDescText: {
+    fontSize: 13.5,
+    fontWeight: "500",
+    color: "#44403C",
+    lineHeight: 20,
+  },
+
+  // Civic Service: Details Card
+  serviceDetailsCard: {
+    backgroundColor: "#EFF6FF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+    marginBottom: 16,
+  },
+  serviceDetailsText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1E3A8A",
+    lineHeight: 22,
+  },
+
+  // Civic Service: Documents Card
+  documentsCard: {
+    backgroundColor: "#ECFDF5",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#A7F3D0",
+    marginBottom: 16,
+  },
+  documentList: {
+    gap: 8,
+  },
+  documentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  documentText: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: "#065F46",
+    lineHeight: 20,
+  },
+
+  // Civic Service: Procedure Card
+  procedureCard: {
+    backgroundColor: "#F5F3FF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#DDD6FE",
+    marginBottom: 16,
+  },
+  procedureText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#5B21B6",
+    lineHeight: 22,
+  },
+
+  // Civic Service: Contact Card
+  contactCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#FED7AA",
+    marginBottom: 16,
+  },
+  officerNameText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1C1917",
+    marginBottom: 10,
+  },
+  callOfficerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EA580C",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  callOfficerButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  // Previous & Next Navigation
+  navigationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginVertical: 16,
+  },
+  navButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  navButtonSub: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#78716C",
+  },
+  navButtonTitle: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#1C1917",
   },
 
   // Empty State
