@@ -1,22 +1,22 @@
-import React, { useState, useEffect } from "react";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Platform,
   StyleSheet,
   Text,
-  View,
-  FlatList,
   TouchableOpacity,
-  Dimensions,
-  ActivityIndicator,
-  Platform,
+  View,
 } from "react-native";
-import { Image } from "expo-image";
 import { Icon } from "react-native-paper";
-import { useRouter } from "expo-router";
 import {
-  NewDevelopmentPlanService,
-  SectionItem,
   CardItem,
   ModuleSettings,
+  NewDevelopmentPlanService,
+  SectionItem,
 } from "../services/newDevelopmentPlanService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -103,9 +103,9 @@ export function HomeDevelopmentPlanSection() {
             <Text style={styles.mainHeading}>
               {settings?.title || "माझे प्रमुख संकल्प – माझा विकास आराखडा"}
             </Text>
-            <Text style={styles.mainSubtitle}>
-              Paper Note मधील चार मुख्य विभागांचा क्रम कायम
-            </Text>
+            {settings?.subtitle && !settings.subtitle.includes("Paper Note") ? (
+              <Text style={styles.mainSubtitle}>{settings.subtitle}</Text>
+            ) : null}
           </View>
         </View>
       </View>
@@ -214,14 +214,6 @@ export function HomeDevelopmentPlanSection() {
           </View>
         );
       })}
-
-      {/* Informational Footer Message */}
-      <View style={styles.footerNoteBox}>
-        <Icon source="information-outline" size={16} color="#78716C" />
-        <Text style={styles.footerNoteText}>
-          ही रचना Paper Note च्या उपलब्ध माहितीवर आधारित आहे. अस्पष्ट हस्तलिखित उपशीर्षके Admin कडून भरता येतील.
-        </Text>
-      </View>
     </View>
   );
 }
@@ -421,27 +413,5 @@ const styles = StyleSheet.create({
   emptyCardText: {
     fontSize: 12.5,
     color: "#9CA3AF",
-  },
-
-  // 8. Informational Footer Box
-  footerNoteBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#F5F5F4",
-    marginHorizontal: 16,
-    marginTop: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E7E5E4",
-  },
-  footerNoteText: {
-    flex: 1,
-    fontSize: 11.5,
-    fontWeight: "500",
-    color: "#78716C",
-    lineHeight: 16,
   },
 });
