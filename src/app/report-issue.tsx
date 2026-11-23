@@ -965,7 +965,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F7F4",
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: 70,
   },
 
   // Top Saffron Header
@@ -1104,23 +1104,24 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  // Category Grid (2 rows of 5)
+  // Category Grid (Responsive 3-Column Layout)
   categoryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "space-between",
+    gap: 8,
+    justifyContent: "flex-start",
   },
   categoryTile: {
-    width: (SCREEN_WIDTH - 32 - 28 - 24) / 5,
-    height: 64,
+    width: "31.4%",
+    minHeight: 72,
     backgroundColor: "#FAF9F6",
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E7E5E4",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
   },
   categoryTileActive: {
     backgroundColor: "#FFF7ED",
@@ -1128,12 +1129,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   categoryTileText: {
-    fontSize: 9.5,
+    fontSize: 10.5,
     color: "#57534E",
     fontWeight: "700",
     textAlign: "center",
-    marginTop: 3,
-    lineHeight: 12,
+    marginTop: 4,
+    lineHeight: 14,
   },
   categoryTileTextActive: {
     color: "#EA580C",
@@ -1152,17 +1153,18 @@ const styles = StyleSheet.create({
   },
   textInput: {
     backgroundColor: "#FAF9F6",
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: "#E7E5E4",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 42,
-    fontSize: 13,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    minHeight: 46,
+    fontSize: 13.5,
     color: "#1C1917",
   },
   textAreaInput: {
-    height: 80,
-    paddingTop: 8,
+    minHeight: 95,
+    paddingTop: 10,
+    paddingBottom: 10,
     textAlignVertical: "top",
   },
   charCounter: {
@@ -1331,7 +1333,7 @@ const styles = StyleSheet.create({
   contactInputsRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   contactInputWrap: {
     flex: 1,
@@ -1340,27 +1342,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FAF9F6",
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: "#E7E5E4",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    height: 44,
-    gap: 6,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 52,
+    gap: 8,
   },
   inputCol: {
     flex: 1,
+    justifyContent: "center",
   },
   inputMiniLabel: {
-    fontSize: 9.5,
+    fontSize: 10.5,
     color: "#78716C",
-    fontWeight: "600",
+    fontWeight: "700",
+    marginBottom: 2,
   },
   singleLineInput: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
     color: "#1C1917",
     padding: 0,
-    height: 20,
+    minHeight: 22,
   },
   checkboxRow: {
     flexDirection: "row",

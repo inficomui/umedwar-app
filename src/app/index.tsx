@@ -40,11 +40,18 @@ export default function SplashScreen() {
         router.replace("/home");
         setTimeout(() => {
           try {
-            router.push(pending as any);
+            if (pending.params && Object.keys(pending.params).length > 0) {
+              router.push({
+                pathname: pending.pathname,
+                params: pending.params,
+              } as any);
+            } else {
+              router.push(pending.pathname as any);
+            }
           } catch {
-            router.replace(pending as any);
+            router.replace(pending.pathname as any);
           }
-        }, 120);
+        }, 150);
       } else {
         router.replace("/home");
       }
@@ -169,12 +176,13 @@ export default function SplashScreen() {
               <View style={styles.avatarGoldBorder}>
                 <Image
                   source={
-                    typeof candidate.photo === "string"
+                    candidate?.photo && typeof candidate.photo === "string"
                       ? { uri: candidate.photo }
-                      : candidate.photo
+                      : candidate?.photo || require("../../assets/images/umedwar.png")
                   }
                   style={styles.avatarImage}
                   contentFit="cover"
+                  priority="high"
                   transition={300}
                 />
               </View>
@@ -203,7 +211,9 @@ export default function SplashScreen() {
             </View>
 
             <Text style={styles.candidateMarathiName}>{candidate.name}</Text>
-            <Text style={styles.candidateEnglishName}>{candidate.englishName}</Text>
+            {candidate.englishName ? (
+              <Text style={styles.candidateEnglishName}>{candidate.englishName}</Text>
+            ) : null}
 
             <View style={styles.constituencyPill}>
               <Text style={styles.constituencyText}>

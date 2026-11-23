@@ -16,7 +16,11 @@ import { Icon } from "react-native-paper";
 
 import { NotificationMediaRenderer, NotificationItem } from "../components/NotificationMediaRenderer";
 import { useCampaign } from "../context/CampaignContext";
-import { triggerLocalNotification, getCachedPushTokens } from "../services/notificationPushService";
+import {
+  triggerLocalNotification,
+  getCachedPushTokens,
+  resolveNotificationRoute,
+} from "../services/notificationPushService";
 
 const NOTIFICATIONS_DATA: NotificationItem[] = [];
 
@@ -263,29 +267,28 @@ export default function NotificationsScreen() {
               key={item.id}
               style={styles.notificationCard}
               onPress={() => {
-                if (
-                  item.targetRoute &&
-                  item.targetRoute !== "/notifications" &&
-                  item.targetRoute !== "/notification-detail"
-                ) {
-                  router.push(item.targetRoute as any);
-                } else {
+                const rawRoute = item.targetRoute || (item as any).target_route;
+                const resolved = resolveNotificationRoute(rawRoute, {
+                  id: String(item.id),
+                  title: item.title,
+                  message: item.description || item.message || "",
+                  mediaType: item.mediaType || (item as any).media_type || "",
+                  mediaUrl: item.mediaUrl || (item as any).media_url || "",
+                  category: item.category || "other",
+                  time:
+                    item.timeAgo ||
+                    item.sentAt ||
+                    (item as any).created_at ||
+                    "आज",
+                });
+
+                if (resolved.params && Object.keys(resolved.params).length > 0) {
                   router.push({
-                    pathname: "/notification-detail",
-                    params: {
-                      id: String(item.id),
-                      title: item.title,
-                      message: item.description || item.message || "",
-                      mediaType: item.mediaType || "",
-                      mediaUrl: item.mediaUrl || (item as any).media_url || "",
-                      category: item.category || "other",
-                      time:
-                        item.timeAgo ||
-                        item.sentAt ||
-                        (item as any).created_at ||
-                        "आज",
-                    },
-                  });
+                    pathname: resolved.pathname,
+                    params: resolved.params,
+                  } as any);
+                } else {
+                  router.push(resolved.pathname as any);
                 }
               }}
               activeOpacity={0.85}

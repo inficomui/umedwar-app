@@ -64,6 +64,16 @@ export default function RootLayout() {
           <Stack.Screen name="issue-map" options={{ headerShown: false }} />
           <Stack.Screen name="events" options={{ headerShown: false }} />
           <Stack.Screen name="event-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="resolutions" options={{ headerShown: false }} />
+          <Stack.Screen name="resolution-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="resolution-form" options={{ headerShown: false }} />
+          <Stack.Screen name="civic-services" options={{ headerShown: false }} />
+          <Stack.Screen name="citizen-departments" options={{ headerShown: false }} />
+          <Stack.Screen name="department-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="new-citizen-submission" options={{ headerShown: false }} />
+          <Stack.Screen name="submission-tracking" options={{ headerShown: false }} />
+          <Stack.Screen name="my-citizen-submissions" options={{ headerShown: false }} />
+          <Stack.Screen name="party-membership" options={{ headerShown: false }} />
           <Stack.Screen name="notifications" options={{ headerShown: false }} />
           <Stack.Screen name="notification-detail" options={{ headerShown: false }} />
           <Stack.Screen name="videos" options={{ headerShown: false }} />
@@ -75,6 +85,7 @@ export default function RootLayout() {
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" options={{ headerShown: false }} />
         </Stack>
       </CampaignProvider>
     </ToastProvider>

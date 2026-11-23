@@ -5,6 +5,8 @@ import {
   NEWS_ARTICLES as DEFAULT_NEWS,
   CUSTOM_AD_BANNERS,
   VIDEO_GALLERY_ITEMS,
+  DEFAULT_RESOLUTIONS,
+  enrichResolution,
   CustomAdBanner,
   VideoGalleryItem,
 } from "../constants/campaignData";
@@ -34,6 +36,7 @@ import {
 } from "../services/issuesApi";
 import { authApi, UserProfile } from "../services/authApi";
 import { VideoService } from "../services/videoService";
+import { sankalpApi } from "../services/sankalpApi";
 
 export type {
   JourneyMilestone,
@@ -119,10 +122,22 @@ export interface CarouselBanner {
 export interface ResolutionItem {
   id: string;
   title: string;
+  slug?: string;
+  fullTitle?: string;
+  shortTitle?: string;
   iconName: string;
   subtitle?: string;
   fullDetails?: string;
   badgeText?: string;
+  sankalpNumber?: number;
+  logoUrl?: string;
+  buttonText?: string;
+  content?: string;
+  sankalpStatement?: string;
+  policies?: string[];
+  actionPlan?: string;
+  category?: string;
+  order?: number;
 }
 
 export interface CampaignContextType {
@@ -177,10 +192,39 @@ export interface CampaignContextType {
   resetToDefaults: () => void;
 }
 
+export function cleanImageUrl(url?: string | null): string | undefined {
+  if (!url || typeof url !== "string") return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+
+  if (trimmed.includes(",")) {
+    const parts = trimmed.split(",").map((p) => p.trim()).filter(Boolean);
+    const uploadPart = parts.find(
+      (p) => p.includes("/uploads/") || /\.(jpe?g|png|webp|gif|svg)$/i.test(p)
+    );
+    if (uploadPart) {
+      if (uploadPart.startsWith("http://") || uploadPart.startsWith("https://")) {
+        return uploadPart;
+      }
+      return `https://${uploadPart.replace(/^\/+/, "")}`;
+    }
+    const httpPart = parts.find((p) => p.startsWith("http"));
+    if (httpPart) return httpPart;
+  }
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("/")) {
+    return `https://backend.misachinmalik.in${trimmed}`;
+  }
+  return `https://${trimmed.replace(/^\/+/, "")}`;
+}
+
 const DEFAULT_CANDIDATE: CandidateProfile = {
   honorific: "कार्यसम्राट व लोकप्रिय उमेदवार",
   name: "श्री. सचिन मलिक",
-  englishName: "Mr. Sachin Malik",
+  englishName: "",
   designation: "शिवसेना अधिकृत उमेदवार",
   constituency: "कोपरगाव विधानसभा मतदारसंघ",
   ward: "कोपरगाव",
@@ -236,8 +280,6 @@ const DEFAULT_QUOTE_CARD: QuoteCardInfo = {
   actionUrl: "/issues",
 };
 
-const DEFAULT_RESOLUTIONS: ResolutionItem[] = [];
-
 const DEFAULT_ABOUT_DETAILS: AboutCandidateData = {
   heroBannerUrl: undefined,
   biography: "",
@@ -291,11 +333,22 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
         const c = res.data.config;
 
         if (c) {
+          const resolvedPhoto = cleanImageUrl(c.candidatePhotoUrl);
+          const resolvedLeaderPhoto = cleanImageUrl(c.leaderPhotoUrl);
+          const resolvedPartyLogo = cleanImageUrl(c.partyLogoUrl);
+
+          const isOldServerImage =
+            resolvedPhoto &&
+            (resolvedPhoto.includes("media_banner") ||
+              resolvedPhoto.includes("banner") ||
+              resolvedPhoto.endsWith("/umedwar.png") ||
+              resolvedPhoto.includes("umedwar.png"));
+
           setCandidate((prev) => ({
             ...prev,
             honorific: c.candidateHonorific || prev.honorific,
             name: c.candidateName || prev.name,
-            englishName: c.candidateEnglishName || prev.englishName,
+            englishName: c.candidateEnglishName || "",
             designation: c.candidateDesignation || prev.designation,
             constituency: c.candidateConstituency || prev.constituency,
             ward: c.candidateWard || prev.ward,
@@ -304,7 +357,10 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
             tagline: c.candidateTagline || prev.tagline,
             biography: c.candidateBiography || prev.biography,
             vision: c.candidateVision || prev.vision,
-            photo: c.candidatePhotoUrl ? { uri: c.candidatePhotoUrl } : prev.photo,
+            photo:
+              resolvedPhoto && !isOldServerImage
+                ? { uri: resolvedPhoto }
+                : prev.photo,
           }));
 
           setPartyLeader((prev) => ({
@@ -313,7 +369,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
             name: c.leaderName || prev.name,
             englishName: c.leaderEnglishName || prev.englishName,
             title: c.leaderTitle || prev.title,
-            photo: c.leaderPhotoUrl ? { uri: c.leaderPhotoUrl } : prev.photo,
+            photo: resolvedLeaderPhoto ? { uri: resolvedLeaderPhoto } : prev.photo,
           }));
 
           setParty((prev) => ({
@@ -324,7 +380,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
             tagline: c.partyTagline || prev.tagline,
             symbolName: c.partySymbolName || prev.symbolName,
             symbolIcon: c.partySymbolIcon || prev.symbolIcon,
-            logo: c.partyLogoUrl ? { uri: c.partyLogoUrl } : prev.logo,
+            logo: resolvedPartyLogo ? { uri: resolvedPartyLogo } : prev.logo,
           }));
 
           setContact((prev) => ({
@@ -367,8 +423,36 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
           setCarouselBanners(mappedBanners);
         }
 
-        if (res.data.resolutions && res.data.resolutions.length > 0) {
-          setResolutions(res.data.resolutions);
+        // Fetch from new dynamic CMS endpoint GET /api/v1/sankalp
+        let cmsLoaded = false;
+        try {
+          const cmsCards = await sankalpApi.getSankalpCards();
+          if (cmsCards && cmsCards.length > 0) {
+            const mappedCms: ResolutionItem[] = cmsCards.map((c) => {
+              const enriched = enrichResolution({ ...c, id: c.id, title: c.title });
+              return {
+                ...enriched,
+                id: String(c.slug || c.id),
+                slug: c.slug,
+                title: c.title,
+                shortTitle: c.title,
+                logoUrl: c.icon_image || enriched.logoUrl,
+                subtitle: c.short_description || enriched.subtitle,
+                buttonText: c.button_text || "अधिक माहिती पहा",
+                order: c.display_order ?? 0,
+              };
+            });
+
+            setResolutions(mappedCms);
+            cmsLoaded = true;
+          }
+        } catch (cmsErr) {
+          console.log("Could not load from /api/v1/sankalp:", cmsErr);
+        }
+
+        if (!cmsLoaded && res.data.resolutions && res.data.resolutions.length > 0) {
+          const enrichedBackend = res.data.resolutions.map(enrichResolution);
+          setResolutions(enrichedBackend);
         }
 
         if (res.data.about) {

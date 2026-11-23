@@ -75,6 +75,216 @@ export function getCachedPushTokens() {
   };
 }
 
+export interface ResolvedRoute {
+  pathname: string;
+  params?: Record<string, any>;
+}
+
+/**
+ * Universal route resolver that converts any backend or push notification route format
+ * (e.g. "/news/4", "/news-detail?id=4", "/issues/12", "notifications", null)
+ * into a valid Expo Router path and parameters, completely preventing 404 errors.
+ */
+export function resolveNotificationRoute(
+  rawRoute?: string | null,
+  fallbackData?: Record<string, any>
+): ResolvedRoute {
+  if (!rawRoute || typeof rawRoute !== "string" || rawRoute.trim() === "") {
+    if (fallbackData?.issueId || fallbackData?.trackingId) {
+      return {
+        pathname: "/issue-detail",
+        params: { id: String(fallbackData.issueId || fallbackData.trackingId) },
+      };
+    }
+    if (fallbackData?.newsId) {
+      return {
+        pathname: "/news-detail",
+        params: { id: String(fallbackData.newsId) },
+      };
+    }
+    if (fallbackData?.eventId) {
+      return {
+        pathname: "/event-detail",
+        params: { id: String(fallbackData.eventId) },
+      };
+    }
+    if (fallbackData?.resolutionId) {
+      return {
+        pathname: "/resolution-detail",
+        params: { id: String(fallbackData.resolutionId) },
+      };
+    }
+    if (fallbackData?.id || fallbackData?.title || fallbackData?.message) {
+      return {
+        pathname: "/notification-detail",
+        params: {
+          id: String(fallbackData.id || "push-item"),
+          title: String(fallbackData.title || ""),
+          message: String(fallbackData.message || fallbackData.description || ""),
+          mediaUrl: String(fallbackData.mediaUrl || fallbackData.media_url || ""),
+          mediaType: String(fallbackData.mediaType || fallbackData.media_type || "none"),
+          category: String(fallbackData.category || "other"),
+          time: String(fallbackData.time || "आत्ताच"),
+        },
+      };
+    }
+    return { pathname: "/notifications" };
+  }
+
+  let clean = rawRoute.trim();
+  // Strip scheme: e.g. sachin-malik:// or https://...
+  clean = clean.replace(/^[a-zA-Z0-9+.-]+:\/\/[^\/]+/, "");
+  if (!clean.startsWith("/")) {
+    clean = "/" + clean;
+  }
+
+  // Extract query parameters if any
+  let pathOnly = clean;
+  const queryParams: Record<string, string> = {};
+  if (clean.includes("?")) {
+    const [pathPart, queryPart] = clean.split("?");
+    pathOnly = pathPart;
+    if (queryPart) {
+      const pairs = queryPart.split("&");
+      for (const pair of pairs) {
+        const [k, v] = pair.split("=");
+        if (k) queryParams[k] = decodeURIComponent(v || "");
+      }
+    }
+  }
+
+  // Normalize path
+  pathOnly = pathOnly.replace(/\/+$/, "");
+  if (pathOnly === "") pathOnly = "/";
+
+  // Match news routes: e.g. /news/4 or /news/4/ -> /news-detail with id: "4"
+  const newsIdMatch = pathOnly.match(/^\/news\/([^\/]+)$/i);
+  if (newsIdMatch) {
+    return {
+      pathname: "/news-detail",
+      params: { id: newsIdMatch[1], ...queryParams },
+    };
+  }
+  if (pathOnly === "/news-detail") {
+    return { pathname: "/news-detail", params: queryParams };
+  }
+  if (pathOnly === "/news") {
+    return { pathname: "/news" };
+  }
+
+  // Match issue routes: e.g. /issues/12 or /issue/12 -> /issue-detail with id
+  const issueIdMatch = pathOnly.match(/^\/(?:issues|issue)\/([^\/]+)$/i);
+  if (issueIdMatch) {
+    return {
+      pathname: "/issue-detail",
+      params: { id: issueIdMatch[1], ...queryParams },
+    };
+  }
+  if (pathOnly === "/issue-detail") {
+    return { pathname: "/issue-detail", params: queryParams };
+  }
+  if (
+    pathOnly === "/issues" ||
+    pathOnly === "/my-issues" ||
+    pathOnly === "/report-issue" ||
+    pathOnly === "/issue-map"
+  ) {
+    return { pathname: pathOnly };
+  }
+
+  // Match event routes: e.g. /events/12 or /event/12 -> /event-detail with id
+  const eventIdMatch = pathOnly.match(/^\/(?:events|event)\/([^\/]+)$/i);
+  if (eventIdMatch) {
+    return {
+      pathname: "/event-detail",
+      params: { id: eventIdMatch[1], ...queryParams },
+    };
+  }
+  if (pathOnly === "/event-detail") {
+    return { pathname: "/event-detail", params: queryParams };
+  }
+  if (pathOnly === "/events") {
+    return { pathname: "/events" };
+  }
+
+  // Match resolution routes: e.g. /resolutions/1 or /sankalp/1 -> /resolution-detail with id
+  const resIdMatch = pathOnly.match(/^\/(?:resolutions|resolution|sankalp)\/([^\/]+)$/i);
+  if (resIdMatch) {
+    return {
+      pathname: "/resolution-detail",
+      params: { id: resIdMatch[1], ...queryParams },
+    };
+  }
+  if (pathOnly === "/resolution-detail") {
+    return { pathname: "/resolution-detail", params: queryParams };
+  }
+  if (pathOnly === "/resolutions" || pathOnly === "/resolution-form") {
+    return { pathname: pathOnly };
+  }
+
+  // Match notification routes: e.g. /notifications/209 or /notification/209 -> /notification-detail
+  const notifIdMatch = pathOnly.match(/^\/(?:notifications|notification)\/([^\/]+)$/i);
+  if (notifIdMatch) {
+    return {
+      pathname: "/notification-detail",
+      params: {
+        id: notifIdMatch[1],
+        title: fallbackData?.title || "",
+        message: fallbackData?.message || fallbackData?.description || "",
+        mediaUrl: fallbackData?.mediaUrl || fallbackData?.media_url || "",
+        mediaType: fallbackData?.mediaType || fallbackData?.media_type || "none",
+        category: fallbackData?.category || "other",
+        time: fallbackData?.time || "आत्ताच",
+        ...queryParams,
+      },
+    };
+  }
+  if (pathOnly === "/notification-detail") {
+    return {
+      pathname: "/notification-detail",
+      params: {
+        id: fallbackData?.id || queryParams.id || "push-item",
+        title: fallbackData?.title || "",
+        message: fallbackData?.message || fallbackData?.description || "",
+        mediaUrl: fallbackData?.mediaUrl || fallbackData?.media_url || "",
+        mediaType: fallbackData?.mediaType || fallbackData?.media_type || "none",
+        category: fallbackData?.category || "other",
+        time: fallbackData?.time || "आत्ताच",
+        ...queryParams,
+      },
+    };
+  }
+  if (pathOnly === "/notifications" || pathOnly === "/notification") {
+    return { pathname: "/notifications" };
+  }
+
+  // Direct valid screens
+  const validScreens = new Set([
+    "/home",
+    "/about",
+    "/contact",
+    "/gallery",
+    "/videos",
+    "/documents",
+    "/civic-services",
+    "/party-membership",
+    "/settings",
+    "/app-about",
+    "/privacy-policy",
+    "/delete-account",
+    "/login",
+    "/register",
+    "/forgot-password",
+  ]);
+
+  if (validScreens.has(pathOnly)) {
+    return { pathname: pathOnly, params: queryParams };
+  }
+
+  console.warn(`⚠️ [Notification Route]: Unknown route '${rawRoute}', falling back safely to /notifications`);
+  return { pathname: "/notifications" };
+}
+
 /**
  * Sets up foreground and click listeners for notifications.
  * Safe to call in both Expo Go and development builds.
@@ -102,54 +312,51 @@ export function setupNotificationListeners(router: any): () => void {
 
     const title = data.title || content.title || "नवीन सूचना";
     const message = data.message || data.body || content.body || "";
-    const mediaUrl = data.mediaUrl || "";
-    const mediaType = data.mediaType || "none";
+    const mediaUrl = data.mediaUrl || data.media_url || "";
+    const mediaType = data.mediaType || data.media_type || "none";
     const category = data.category || "other";
-    const targetRoute = data.targetRoute;
+    const rawTargetRoute = (data.targetRoute ||
+      data.target_route ||
+      data.route ||
+      data.screen ||
+      data.url ||
+      data.path ||
+      data.click_action) as string | undefined;
 
     console.log("👉 [Notification Panel Clicked]:", {
       title,
       message,
       mediaUrl,
       mediaType,
-      targetRoute,
+      rawTargetRoute,
       data,
     });
 
-    const isIssueNotif =
-      targetRoute === "/issue-detail" ||
-      category === "issues" ||
-      Boolean(data.issueId) ||
-      Boolean(data.trackingId);
+    const resolved = resolveNotificationRoute(rawTargetRoute, {
+      ...data,
+      id: data.id || data.notificationId || data.issueId,
+      title,
+      message,
+      mediaUrl,
+      mediaType,
+      category,
+      time: "आत्ताच (Just now)",
+    });
 
-    const resolvedPath: string = isIssueNotif
-      ? "/issue-detail"
-      : typeof targetRoute === "string" &&
-        targetRoute !== "/notifications" &&
-        targetRoute !== "/notification-detail"
-        ? targetRoute
-        : "/notification-detail";
-
-    const nextRoute = {
-      pathname: resolvedPath,
-      params: {
-        id: String(data.issueId || data.id || data.trackingId || data.notificationId || "push-item"),
-        title: String(title),
-        message: String(message),
-        mediaUrl: String(mediaUrl),
-        mediaType: String(mediaType),
-        category: String(category),
-        time: "आत्ताच (Just now)",
-      },
-    };
-
-    setPendingNotificationRoute(nextRoute);
+    setPendingNotificationRoute({
+      pathname: resolved.pathname,
+      params: resolved.params || {},
+    });
 
     setTimeout(() => {
       try {
-        router.push(nextRoute as any);
-      } catch {
-        // splash screen will pick it up
+        if (resolved.params && Object.keys(resolved.params).length > 0) {
+          router.push({ pathname: resolved.pathname, params: resolved.params } as any);
+        } else {
+          router.push(resolved.pathname as any);
+        }
+      } catch (err) {
+        console.warn("Could not navigate from notification click:", err);
       }
     }, 250);
   };

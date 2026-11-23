@@ -453,6 +453,58 @@ class AppConfigApiService {
       return null;
     }
   }
+
+  /**
+   * Fetch Resolutions list independently if required
+   * Endpoint: GET /api/v1/resolutions
+   */
+  async getResolutions(): Promise<ResolutionItem[] | null> {
+    try {
+      const url = `${API_BASE_URL}/api/v1/resolutions`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const json = await response.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        return json.data as ResolutionItem[];
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetch Single Resolution by ID
+   * Endpoint: GET /api/v1/resolutions/:id
+   */
+  async getResolutionById(id: string | number): Promise<ResolutionItem | null> {
+    try {
+      const url = `${API_BASE_URL}/api/v1/resolutions/${encodeURIComponent(String(id))}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const json = await response.json();
+      if (json && json.success && json.data) {
+        return json.data as ResolutionItem;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 export interface EventItem {

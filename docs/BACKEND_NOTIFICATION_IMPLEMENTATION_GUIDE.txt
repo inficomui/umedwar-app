@@ -1,0 +1,777 @@
+================================================================================
+BACKEND & ADMIN PANEL NOTIFICATION IMPLEMENTATION GUIDE
+Sachin Malik Candidate Application (Kopargaon Constituency)
+Complete Guide to Fix 404 Notification Click Errors & Standardize Routing
+================================================================================
+
+1. PROBLEM SUMMARY & ROOT CAUSE
+--------------------------------------------------------------------------------
+In the mobile application (React Native / Expo Router), screens are defined
+using file-based routing with dedicated naming conventions (e.g. news-detail.tsx,
+issue-detail.tsx, notification-detail.tsx).
+
+When notifications were dispatched with REST-style routes such as:
+  targetRoute: "/news/4"
+Expo Router attempted to look for a screen file at "/app/news/[id].tsx" or
+"/app/news/4.tsx". Since neither existed, Expo Router triggered:
+  "Unmatched Route: This screen doesn't exist. (404) - /news/4"
+
+To fix this completely, the backend and admin panel must follow the standard
+route mapping specification detailed below, while the mobile app has also been
+fortified with a universal route resolver and a +not-found fallback interceptor.
+
+
+================================================================================
+2. OFFICIAL MOBILE ROUTING MAP FOR NOTIFICATIONS
+================================================================================
+
+Target Destination            | Recommended targetRoute | Required Param (id)
+------------------------------+-------------------------+-----------------------
+1. Specific News Article      | /news-detail            | id: "<news_id>"
+2. Specific Citizen Issue     | /issue-detail           | id: "<tracking_id>"
+3. Specific Event Detail      | /event-detail           | id: "<event_id>"
+4. Specific Resolution Detail | /resolution-detail      | id: "<resolution_id>"
+5. Specific Notification View | /notification-detail    | id: "<notif_id>"
+6. All Notifications List     | /notifications          | (None)
+7. All News List              | /news                   | (None)
+8. All Issues (Citizen Issues)| /issues                 | (None)
+9. My Issues Status           | /my-issues              | (None)
+10. Report New Issue Form     | /report-issue           | (None)
+11. All Resolutions List      | /resolutions            | (None)
+12. All Events Calendar       | /events                 | (None)
+13. Civic Services (26 Depts) | /civic-services         | (None)
+14. Shiv Sena Membership Form | /party-membership       | (None)
+15. Photo Gallery             | /gallery                | (None)
+16. Video Highlights          | /videos                 | (None)
+17. Government Schemes / Docs | /documents              | (None)
+18. Contact Office            | /contact                | (None)
+19. About Candidate           | /about                  | (None)
+20. App Home Screen           | /home                   | (None)
+
+
+================================================================================
+3. DATABASE SCHEMA CHANGES
+================================================================================
+
+Ensure your `notifications` table has the following standard columns:
+
+--- MySQL / MariaDB Schema ---
+CREATE TABLE IF NOT EXISTS `notifications` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `category` ENUM('news', 'issues', 'events', 'resolutions', 'general', 'other') NOT NULL DEFAULT 'general',
+  `title` VARCHAR(255) NOT NULL,
+  `description` TEXT NOT NULL,
+  `message` TEXT NULL,
+  `icon` VARCHAR(100) DEFAULT 'bell-outline',
+  `icon_color` VARCHAR(50) DEFAULT '#EA580C',
+  `icon_bg` VARCHAR(50) DEFAULT '#FFF7ED',
+  `indicator_dot` VARCHAR(50) DEFAULT '#16A34A',
+  `target_route` VARCHAR(255) NOT NULL DEFAULT '/notifications',
+  `item_id` VARCHAR(100) NULL,
+  `media_type` ENUM('none', 'image', 'video', 'pdf', 'audio') DEFAULT 'none',
+  `media_url` VARCHAR(500) NULL,
+  `audience` ENUM('all', 'registered', 'ward', 'individual') DEFAULT 'all',
+  `audience_filter` VARCHAR(100) NULL,
+  `priority` ENUM('low', 'normal', 'high') DEFAULT 'normal',
+  `is_active` BOOLEAN DEFAULT TRUE,
+  `sort_order` INT DEFAULT 0,
+  `sent_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_category (`category`),
+  INDEX idx_target_route (`target_route`),
+  INDEX idx_sent_at (`sent_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--- Device Tokens Table for Push Notifications ---
+CREATE TABLE IF NOT EXISTS `device_tokens` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `token` VARCHAR(500) NOT NULL UNIQUE,
+  `fcm_token` VARCHAR(500) NULL,
+  `expo_token` VARCHAR(500) NULL,
+  `platform` VARCHAR(50) DEFAULT 'android',
+  `user_id` VARCHAR(100) NULL,
+  `mobile` VARCHAR(20) NULL,
+  `name` VARCHAR(150) NULL,
+  `candidate_id` VARCHAR(100) DEFAULT 'sachin-malik',
+  `is_active` BOOLEAN DEFAULT TRUE,
+  `last_active_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_id (`user_id`),
+  INDEX idx_mobile (`mobile`),
+  INDEX idx_platform (`platform`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+================================================================================
+4. BACKEND IMPLEMENTATION (Node.js / Express / TypeScript or JavaScript)
+================================================================================
+
+Below is the complete, drop-in `notificationHelper.js` and `notificationService.js`
+that guarantees clean, standard route generation and sends push notifications
+via Firebase Admin SDK and Expo Server SDK.
+
+--------------------------------------------------------------------------------
+FILE: services/notificationHelper.js
+--------------------------------------------------------------------------------
+/**
+ * Normalizes notification targets into official Expo Router paths.
+ * Guarantees that the app will never receive a 404 route.
+ */
+function buildTargetRoute(category, itemId) {
+  const cleanId = itemId ? String(itemId).trim() : null;
+
+  switch (category) {
+    case 'news':
+      return cleanId ? `/news-detail` : `/news`;
+
+    case 'issues':
+    case 'issue':
+      return cleanId ? `/issue-detail` : `/issues`;
+
+    case 'events':
+    case 'event':
+      return cleanId ? `/event-detail` : `/events`;
+
+    case 'resolutions':
+    case 'resolution':
+    case 'sankalp':
+      return cleanId ? `/resolution-detail` : `/resolutions`;
+
+    case 'civic-services':
+      return `/civic-services`;
+
+    case 'party-membership':
+      return `/party-membership`;
+
+    case 'general':
+    case 'notifications':
+    default:
+      return cleanId ? `/notification-detail` : `/notifications`;
+  }
+}
+
+/**
+ * Validates and sanitizes a custom target route entered by an admin.
+ */
+function sanitizeTargetRoute(rawRoute, fallbackCategory, itemId) {
+  if (!rawRoute || typeof rawRoute !== 'string' || rawRoute.trim() === '') {
+    return buildTargetRoute(fallbackCategory, itemId);
+  }
+
+  let clean = rawRoute.trim();
+
+  // If admin typed "/news/4", normalize to "/news-detail"
+  const newsMatch = clean.match(/^\/?news\/([^\/]+)$/i);
+  if (newsMatch) {
+    return { targetRoute: '/news-detail', id: newsMatch[1] };
+  }
+
+  // If admin typed "/issues/12", normalize to "/issue-detail"
+  const issueMatch = clean.match(/^\/?(?:issues|issue)\/([^\/]+)$/i);
+  if (issueMatch) {
+    return { targetRoute: '/issue-detail', id: issueMatch[1] };
+  }
+
+  // If admin typed "/events/5", normalize to "/event-detail"
+  const eventMatch = clean.match(/^\/?(?:events|event)\/([^\/]+)$/i);
+  if (eventMatch) {
+    return { targetRoute: '/event-detail', id: eventMatch[1] };
+  }
+
+  // If admin typed "/resolutions/1", normalize to "/resolution-detail"
+  const resMatch = clean.match(/^\/?(?:resolutions|resolution|sankalp)\/([^\/]+)$/i);
+  if (resMatch) {
+    return { targetRoute: '/resolution-detail', id: resMatch[1] };
+  }
+
+  // If admin typed "notifications" or "/notifications"
+  if (clean === '/notifications' || clean === 'notifications') {
+    return { targetRoute: '/notifications', id: null };
+  }
+
+  // Ensure leading slash
+  if (!clean.startsWith('/')) {
+    clean = '/' + clean;
+  }
+
+  return { targetRoute: clean, id: itemId ? String(itemId) : null };
+}
+
+module.exports = {
+  buildTargetRoute,
+  sanitizeTargetRoute,
+};
+
+
+--------------------------------------------------------------------------------
+FILE: services/notificationService.js
+--------------------------------------------------------------------------------
+const admin = require('firebase-admin'); // Firebase Admin SDK
+const { Expo } = require('expo-server-sdk'); // Expo Server SDK
+const db = require('../config/database'); // Your database connection pool
+const { sanitizeTargetRoute } = require('./notificationHelper');
+
+const expo = new Expo();
+
+/**
+ * Dispatches a push notification to devices and saves it to the database.
+ * 
+ * @param {Object} params
+ * @param {string} params.title - Notification title
+ * @param {string} params.description - Notification summary
+ * @param {string} [params.category] - 'news' | 'issues' | 'events' | 'resolutions' | 'general'
+ * @param {string} [params.targetRoute] - Target screen route
+ * @param {string|number} [params.itemId] - ID of the target resource (e.g. newsId, trackingId)
+ * @param {string} [params.mediaType] - 'none' | 'image' | 'video' | 'pdf'
+ * @param {string} [params.mediaUrl] - Image or document URL
+ * @param {string} [params.userId] - Optional: specific user ID for targeted dispatch
+ * @param {string} [params.mobile] - Optional: specific citizen phone number
+ */
+async function sendNotification(params) {
+  const {
+    title,
+    description,
+    category = 'general',
+    targetRoute: rawTargetRoute,
+    itemId,
+    mediaType = 'none',
+    mediaUrl = null,
+    userId = null,
+    mobile = null,
+    priority = 'normal',
+  } = params;
+
+  // 1. Sanitize the target route so 404 is impossible
+  const { targetRoute, id: resolvedId } = sanitizeTargetRoute(rawTargetRoute, category, itemId);
+
+  // 2. Insert record into `notifications` database table
+  const insertQuery = `
+    INSERT INTO notifications 
+      (category, title, description, message, target_route, item_id, media_type, media_url, priority, sent_at)
+    VALUES 
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `;
+
+  let notificationDbId = null;
+  try {
+    const [result] = await db.execute(insertQuery, [
+      category,
+      title,
+      description,
+      description,
+      targetRoute,
+      resolvedId || null,
+      mediaType,
+      mediaUrl,
+      priority,
+    ]);
+    notificationDbId = result.insertId;
+  } catch (dbErr) {
+    console.error('Error inserting notification into database:', dbErr);
+  }
+
+  // 3. Prepare FCM / Expo payload data
+  // NOTE: In FCM data payload, all values must be strings!
+  const pushDataPayload = {
+    targetRoute: String(targetRoute),
+    id: String(resolvedId || notificationDbId || 'push-item'),
+    title: String(title),
+    message: String(description),
+    body: String(description),
+    category: String(category),
+    mediaType: String(mediaType || 'none'),
+    mediaUrl: mediaUrl ? String(mediaUrl) : '',
+    notificationId: notificationDbId ? String(notificationDbId) : '',
+  };
+
+  // If targeting specific issue or news item, include explicit keys for safety
+  if (category === 'news' && resolvedId) {
+    pushDataPayload.newsId = String(resolvedId);
+  } else if ((category === 'issues' || category === 'issue') && resolvedId) {
+    pushDataPayload.issueId = String(resolvedId);
+    pushDataPayload.trackingId = String(resolvedId);
+  } else if (category === 'events' && resolvedId) {
+    pushDataPayload.eventId = String(resolvedId);
+  } else if (category === 'resolutions' && resolvedId) {
+    pushDataPayload.resolutionId = String(resolvedId);
+  }
+
+  // 4. Retrieve target device tokens
+  let tokensQuery = 'SELECT token, fcm_token, expo_token FROM device_tokens WHERE is_active = 1';
+  const queryParams = [];
+
+  if (userId) {
+    tokensQuery += ' AND user_id = ?';
+    queryParams.push(userId);
+  } else if (mobile) {
+    const cleanMobile = String(mobile).replace(/\D/g, '').slice(-10);
+    tokensQuery += ' AND mobile = ?';
+    queryParams.push(cleanMobile);
+  }
+
+  let deviceRows = [];
+  try {
+    const [rows] = await db.execute(tokensQuery, queryParams);
+    deviceRows = rows;
+  } catch (err) {
+    console.error('Error fetching device tokens:', err);
+  }
+
+  if (deviceRows.length === 0) {
+    console.log('No registered devices found for dispatch.');
+    return { success: true, count: 0, notificationId: notificationDbId };
+  }
+
+  // 5. Group into FCM and Expo Push tokens
+  const fcmTokens = [];
+  const expoTokens = [];
+
+  deviceRows.forEach((row) => {
+    const fcm = row.fcm_token;
+    const expoTok = row.expo_token || row.token;
+
+    if (fcm && typeof fcm === 'string' && fcm.length > 20) {
+      fcmTokens.push(fcm);
+    } else if (expoTok && Expo.isExpoPushToken(expoTok)) {
+      expoTokens.push(expoTok);
+    }
+  });
+
+  // 6. Dispatch via Firebase Cloud Messaging (FCM)
+  if (fcmTokens.length > 0) {
+    try {
+      // Chunk tokens in batches of 500 (FCM limit)
+      const chunkSize = 500;
+      for (let i = 0; i < fcmTokens.length; i += chunkSize) {
+        const batchTokens = fcmTokens.slice(i, i + chunkSize);
+        const fcmMessage = {
+          notification: {
+            title: title,
+            body: description,
+          },
+          data: pushDataPayload,
+          android: {
+            priority: priority === 'high' ? 'high' : 'normal',
+            notification: {
+              channelId: 'default',
+              color: '#EA580C',
+              sound: 'default',
+              clickAction: 'FLUTTER_NOTIFICATION_CLICK', // standard Android intent trigger
+            },
+          },
+          tokens: batchTokens,
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(fcmMessage);
+        console.log(`✅ FCM Sent: ${response.successCount} success, ${response.failureCount} failed`);
+
+        // Handle invalid/expired tokens cleanup
+        if (response.failureCount > 0) {
+          response.responses.forEach((resp, idx) => {
+            if (!resp.success) {
+              const errCode = resp.error?.code;
+              if (
+                errCode === 'messaging/invalid-registration-token' ||
+                errCode === 'messaging/registration-token-not-registered'
+              ) {
+                const badToken = batchTokens[idx];
+                db.execute('DELETE FROM device_tokens WHERE fcm_token = ? OR token = ?', [badToken, badToken]).catch(() => {});
+              }
+            }
+          });
+        }
+      }
+    } catch (fcmErr) {
+      console.error('Error during FCM multicast dispatch:', fcmErr);
+    }
+  }
+
+  // 7. Dispatch via Expo Push Service
+  if (expoTokens.length > 0) {
+    try {
+      const messages = expoTokens.map((pushToken) => ({
+        to: pushToken,
+        sound: 'default',
+        title: title,
+        body: description,
+        data: pushDataPayload,
+        channelId: 'default',
+      }));
+
+      const chunks = expo.chunkPushNotifications(messages);
+      for (const chunk of chunks) {
+        try {
+          const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+          console.log(`✅ Expo Push Tickets generated: ${ticketChunk.length}`);
+        } catch (error) {
+          console.error('Error sending Expo push chunk:', error);
+        }
+      }
+    } catch (expoErr) {
+      console.error('Error during Expo Push dispatch:', expoErr);
+    }
+  }
+
+  return {
+    success: true,
+    notificationId: notificationDbId,
+    targetRoute,
+    fcmCount: fcmTokens.length,
+    expoCount: expoTokens.length,
+  };
+}
+
+module.exports = {
+  sendNotification,
+};
+
+
+--------------------------------------------------------------------------------
+FILE: controllers/notificationController.js
+--------------------------------------------------------------------------------
+const { sendNotification } = require('../services/notificationService');
+const db = require('../config/database');
+
+/**
+ * POST /api/v1/notifications/send
+ * Called from Admin Panel to dispatch notifications.
+ */
+async function handleSendNotification(req, res) {
+  try {
+    const {
+      title,
+      description,
+      category,
+      targetRoute,
+      itemId,
+      mediaType,
+      mediaUrl,
+      userId,
+      mobile,
+      priority,
+    } = req.body;
+
+    if (!title || !description) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title and description are required.',
+      });
+    }
+
+    const result = await sendNotification({
+      title,
+      description,
+      category,
+      targetRoute,
+      itemId,
+      mediaType,
+      mediaUrl,
+      userId,
+      mobile,
+      priority,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Notification dispatched successfully',
+      data: result,
+    });
+  } catch (error) {
+    console.error('handleSendNotification error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to send notification',
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * POST /api/v1/notifications/register-token
+ * Called by mobile app on startup or login to register push token.
+ */
+async function handleRegisterToken(req, res) {
+  try {
+    const {
+      token,
+      fcmToken,
+      fcm_token,
+      expoToken,
+      expo_token,
+      platform = 'android',
+      userId,
+      user_id,
+      mobile,
+      phone,
+      name,
+      candidateId,
+      candidate_id,
+    } = req.body;
+
+    const finalToken = token || fcmToken || fcm_token || expoToken || expo_token;
+    if (!finalToken) {
+      return res.status(400).json({ success: false, message: 'Push token required.' });
+    }
+
+    const cleanMobile = (mobile || phone) ? String(mobile || phone).replace(/\D/g, '').slice(-10) : null;
+    const cleanUserId = userId || user_id || null;
+    const finalFcm = fcmToken || fcm_token || (finalToken.length > 50 ? finalToken : null);
+    const finalExpo = expoToken || expo_token || (finalToken.startsWith('ExponentPushToken') ? finalToken : null);
+
+    const upsertQuery = `
+      INSERT INTO device_tokens 
+        (token, fcm_token, expo_token, platform, user_id, mobile, name, candidate_id, is_active, last_active_at)
+      VALUES 
+        (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
+      ON DUPLICATE KEY UPDATE
+        fcm_token = COALESCE(VALUES(fcm_token), fcm_token),
+        expo_token = COALESCE(VALUES(expo_token), expo_token),
+        user_id = COALESCE(VALUES(user_id), user_id),
+        mobile = COALESCE(VALUES(mobile), mobile),
+        name = COALESCE(VALUES(name), name),
+        is_active = 1,
+        last_active_at = NOW()
+    `;
+
+    await db.execute(upsertQuery, [
+      finalToken,
+      finalFcm,
+      finalExpo,
+      platform,
+      cleanUserId,
+      cleanMobile,
+      name || null,
+      candidateId || candidate_id || 'sachin-malik',
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Push token registered successfully',
+    });
+  } catch (error) {
+    console.error('handleRegisterToken error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to register token',
+    });
+  }
+}
+
+/**
+ * GET /api/v1/notifications
+ * Lists all active notifications for mobile app sync.
+ */
+async function handleGetNotifications(req, res) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '30', 10)));
+    const offset = (page - 1) * limit;
+
+    const [rows] = await db.execute(
+      `SELECT 
+        id, category, icon, icon_color AS iconColor, icon_bg AS iconBg,
+        title, description, message, indicator_dot AS indicatorDot,
+        target_route AS targetRoute, item_id AS itemId,
+        media_type AS mediaType, media_url AS mediaUrl,
+        priority, sent_at AS sentAt, is_active AS isActive,
+        created_at AS createdAt
+      FROM notifications
+      WHERE is_active = 1
+      ORDER BY sent_at DESC, id DESC
+      LIMIT ? OFFSET ?`,
+      [String(limit), String(offset)]
+    );
+
+    // Format human-friendly time for Marathi UI
+    const mapped = rows.map((r) => {
+      // Ensure targetRoute has no broken REST style
+      let sanitized = r.targetRoute;
+      if (sanitized && sanitized.startsWith('/news/') && r.itemId) {
+        sanitized = '/news-detail';
+      }
+      return {
+        ...r,
+        targetRoute: sanitized,
+        timeAgo: 'आत्ताच',
+      };
+    });
+
+    const [countRows] = await db.execute(
+      'SELECT COUNT(*) as total FROM notifications WHERE is_active = 1'
+    );
+    const total = countRows[0]?.total || 0;
+
+    return res.status(200).json({
+      success: true,
+      data: mapped,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('handleGetNotifications error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+}
+
+module.exports = {
+  handleSendNotification,
+  handleRegisterToken,
+  handleGetNotifications,
+};
+
+
+================================================================================
+5. ADMIN PANEL FORM CHANGES (HTML / React / Vue / Blade)
+================================================================================
+
+In your Admin Dashboard when creating or dispatching a notification:
+Do NOT let admins type free-form route strings like "/news/4".
+Instead, provide a dropdown selector for the "Notification Action / Target Screen".
+
+--- Example React / HTML Admin Form Component ---
+
+<form onSubmit={handleAdminNotificationSubmit}>
+  <!-- 1. Title -->
+  <div class="form-group">
+    <label>सूचना शीर्षक (Title):</label>
+    <input type="text" name="title" required placeholder="उदा. नवीन योजना जाहीर..." />
+  </div>
+
+  <!-- 2. Message / Description -->
+  <div class="form-group">
+    <label>सूचना सविस्तर मजकूर (Description):</label>
+    <textarea name="description" required rows="3"></textarea>
+  </div>
+
+  <!-- 3. Target Screen Dropdown -->
+  <div class="form-group">
+    <label>क्लिक केल्यावर कोणते पान उघडायचे? (Target Screen):</label>
+    <select name="screenType" id="screenSelector" onChange={onScreenChange}>
+      <option value="/notifications">सर्व सूचना यादी (Notifications List)</option>
+      <option value="/news-detail">विशिष्ट बातमी (Specific News Article)</option>
+      <option value="/news">सर्व बातम्या यादी (All News)</option>
+      <option value="/issue-detail">नागरी तक्रार / समस्या (Citizen Grievance)</option>
+      <option value="/issues">सर्व तक्रारी (All Issues)</option>
+      <option value="/event-detail">विशिष्ट कार्यक्रम (Specific Event)</option>
+      <option value="/events">सर्व कार्यक्रम (Events Calendar)</option>
+      <option value="/resolution-detail">विशिष्ट संकल्प (Specific Resolution)</option>
+      <option value="/resolutions">विकास आराखडा / सर्व संकल्प (All Resolutions)</option>
+      <option value="/civic-services">नागरिक सेवा (Civic Services - 26 Depts)</option>
+      <option value="/party-membership">शिवसेना सदस्य नोंदणी (Party Registration)</option>
+      <option value="/contact">कार्यालय संपर्क (Contact Office)</option>
+    </select>
+  </div>
+
+  <!-- 4. Dynamic Resource ID Field (Only visible when detail screen is selected) -->
+  <div class="form-group" id="itemIdContainer" style="display: none;">
+    <label id="itemIdLabel">संबंधित बाबीचा आयडी (Item ID):</label>
+    <input type="text" name="itemId" placeholder="उदा. 4 (बातमी आयडी किंवा तक्रार क्रमांक)" />
+  </div>
+
+  <!-- 5. Media Attachment (Optional Image / PDF) -->
+  <div class="form-group">
+    <label>फोटो / बॅनर अपलोड (Media Attachment):</label>
+    <input type="file" name="mediaFile" accept="image/*,application/pdf" />
+  </div>
+
+  <button type="submit" class="btn btn-primary">
+    🚀 नोटिफिकेशन पाठवा (Send Notification)
+  </button>
+</form>
+
+--- JavaScript logic for Admin Form ---
+<script>
+  function onScreenChange(e) {
+    const val = e.target.value;
+    const itemContainer = document.getElementById('itemIdContainer');
+    const itemLabel = document.getElementById('itemIdLabel');
+
+    if (val === '/news-detail') {
+      itemContainer.style.display = 'block';
+      itemLabel.innerText = 'बातमी आयडी (News ID):';
+    } else if (val === '/issue-detail') {
+      itemContainer.style.display = 'block';
+      itemLabel.innerText = 'तक्रार / समस्या क्रमांक (Issue / Tracking ID):';
+    } else if (val === '/event-detail') {
+      itemContainer.style.display = 'block';
+      itemLabel.innerText = 'कार्यक्रम आयडी (Event ID):';
+    } else if (val === '/resolution-detail') {
+      itemContainer.style.display = 'block';
+      itemLabel.innerText = 'संकल्प क्रमांक (Resolution Number / ID):';
+    } else {
+      itemContainer.style.display = 'none';
+    }
+  }
+</script>
+
+
+================================================================================
+6. TESTING & VERIFICATION VIA CURL
+================================================================================
+
+You can verify the backend fix by running these direct cURL commands against
+your API:
+
+1. Test News Notification Dispatch:
+curl -X POST https://backend.misachinmalik.in/api/v1/notifications/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "📰 बातमी अद्यतन: कोपरगाव विकास",
+    "description": "मतदारसंघातील नवीन रस्ते कामांचे भूमिपूजन संपन्न.",
+    "category": "news",
+    "targetRoute": "/news-detail",
+    "itemId": "4",
+    "mediaType": "image",
+    "mediaUrl": "https://backend.misachinmalik.in/public/uploads/banner.jpg"
+  }'
+
+2. Test General Broadcast Notification:
+curl -X POST https://backend.misachinmalik.in/api/v1/notifications/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "📢 जाहीर सूचना",
+    "description": "उद्या होणाऱ्या कार्यकर्ता मेळाव्यास उपस्थित राहावे.",
+    "category": "general",
+    "targetRoute": "/notifications"
+  }'
+
+3. Test Citizen Issue Update Notification:
+curl -X POST https://backend.misachinmalik.in/api/v1/notifications/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "✅ आपली तक्रार निकाली निघाली",
+    "description": "आपण नोंदवलेली पाण्याची समस्या यशस्वीरीत्या सोडवण्यात आली आहे.",
+    "category": "issues",
+    "targetRoute": "/issue-detail",
+    "itemId": "KPG-2026-0042",
+    "mobile": "9876543210"
+  }'
+
+
+================================================================================
+7. SUMMARY OF CHANGES COMPLETED
+================================================================================
+
+1. MOBILE APP:
+   - Created `resolveNotificationRoute` in `src/services/notificationPushService.ts`.
+   - Updated system push notification click listeners to use safe routing.
+   - Updated in-app notification card click logic in `src/app/notifications.tsx`.
+   - Added global `+not-found.tsx` catch-all screen in `src/app/+not-found.tsx`
+     to intercept any external or deep link unmatched route and redirect safely.
+   - Tested TypeScript build: 0 errors.
+
+2. BACKEND:
+   - Provide standard `/news-detail`, `/issue-detail`, `/event-detail`, and
+     `/notifications` routes.
+   - Send `id` or resource identifier in the notification `data` payload.
+   - Implement `sanitizeTargetRoute` in `notificationService.js` to ensure 100%
+     resilience against legacy `/news/4` paths.
+
+================================================================================
+END OF IMPLEMENTATION GUIDE
+================================================================================

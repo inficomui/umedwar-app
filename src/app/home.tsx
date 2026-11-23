@@ -22,6 +22,7 @@ import { useRouter } from "expo-router";
 import { Icon } from "react-native-paper";
 import { useCampaign, CarouselBanner } from "../context/CampaignContext";
 import { BottomTabBar } from "../components/BottomTabBar";
+import CitizenServicesQuickCard from "../components/home/CitizenServicesQuickCard";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 // 1024 x 512 image aspect ratio (2:1)
@@ -144,7 +145,7 @@ export default function HomeScreen() {
             <Image
               source={require("../../assets/images/shivsena_logo.png")}
               style={styles.logoEmblemImg}
-              contentFit="cover"
+              contentFit="contain"
             />
           </View>
           <View style={styles.headerTitleGroup}>
@@ -240,6 +241,20 @@ export default function HomeScreen() {
           activeOpacity={0.9}
           onPress={() => router.push("/about")}
         >
+          {/* Candidate Photo at Top of Card (Editable from Admin Panel) */}
+          <View style={styles.candidatePhotoAvatarWrap}>
+            <Image
+              source={
+                candidate?.photo && typeof candidate.photo === "string"
+                  ? { uri: candidate.photo }
+                  : candidate?.photo || require("../../assets/images/umedwar.png")
+              }
+              style={styles.candidatePhotoAvatar}
+              contentFit="cover"
+              transition={200}
+            />
+          </View>
+
           {/* Top Badges Row */}
           <View style={styles.candidateBadgeRow}>
             {party?.shortName ? (
@@ -249,26 +264,34 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : null}
-            <View style={styles.candidateHonorificBadge}>
-              <Text
-                style={styles.candidateHonorificText}
-                numberOfLines={2}
-              >
-                ★ {candidate.honorific || "लोकप्रिय उमेदवार"} ★
-              </Text>
-            </View>
+            {candidate?.honorific ? (
+              <View style={styles.candidateHonorificBadge}>
+                <Text
+                  style={styles.candidateHonorificText}
+                  numberOfLines={2}
+                >
+                  ★ {candidate.honorific} ★
+                </Text>
+              </View>
+            ) : null}
           </View>
 
-          {/* Big Bold Candidate Name in Marathi */}
+          {/* Big Bold Candidate Name in Marathi (Editable from Admin Panel) */}
           <Text style={styles.candidateBigName}>
             {candidate.name}
           </Text>
 
-          {/* Subtitle Details: English Name & Constituency */}
+          {/* Subtitle Details: Designation & Constituency (Removed "Mr. Sachin Malik") */}
           <View style={styles.candidateInfoRow}>
-            <Text style={styles.candidateEnglishSub}>{candidate.englishName}</Text>
-            <Text style={styles.candidateMetaSep}>•</Text>
-            <Text style={styles.candidateConstituencySub}>📍 {candidate.constituency}</Text>
+            {candidate.designation ? (
+              <Text style={styles.candidateDesignationSub}>{candidate.designation}</Text>
+            ) : null}
+            {candidate.designation && candidate.constituency ? (
+              <Text style={styles.candidateMetaSep}>•</Text>
+            ) : null}
+            {candidate.constituency ? (
+              <Text style={styles.candidateConstituencySub}>📍 {candidate.constituency}</Text>
+            ) : null}
           </View>
         </TouchableOpacity>
 
@@ -300,10 +323,10 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Section: "माझे प्रमुख संकल्प" */}
+        {/* Section: "माझे प्रमुख संकल्प" (Heading & Uploaded Logo Cards Slider) */}
         {resolutions && resolutions.length > 0 && (
           <View style={styles.resolutionsSection}>
-            <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16 }]}>
               <View style={styles.titleWithUnderline}>
                 <Text style={styles.sectionTitle}>माझे प्रमुख संकल्प</Text>
                 <View style={styles.titleUnderline} />
@@ -312,29 +335,52 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.viewAllRow}
                 activeOpacity={0.75}
-                onPress={() => router.push("/issues")}
+                onPress={() => router.push("/resolutions")}
               >
                 <Text style={styles.viewAllText}>सर्व पहा</Text>
                 <Icon source="arrow-right" size={15} color="#E05300" />
               </TouchableOpacity>
             </View>
 
-            {/* Dynamic Grid Cards from Context */}
-            <View style={styles.resolutionsGrid}>
+            {/* Horizontal Slider of Resolution Cards */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.resolutionsSliderScroll}
+              decelerationRate="fast"
+            >
               {resolutions.map((item) => (
                 <TouchableOpacity
-                  key={item.id}
+                  key={String(item.id)}
                   style={styles.resolutionCard}
                   activeOpacity={0.85}
-                  onPress={() => router.push("/issues")}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/resolution-detail",
+                      params: {
+                        id: String(item.id),
+                        slug: item.slug || String(item.id),
+                      },
+                    })
+                  }
                 >
                   <View style={styles.resolutionIconWrap}>
-                    <Icon source={item.iconName || "star"} size={26} color="#E05300" />
+                    {item.logoUrl ? (
+                      <Image
+                        source={{ uri: item.logoUrl }}
+                        style={styles.resolutionLogoImage}
+                        contentFit="contain"
+                      />
+                    ) : (
+                      <Icon source={item.iconName || "star"} size={28} color="#E05300" />
+                    )}
                   </View>
-                  <Text style={styles.resolutionText}>{item.title}</Text>
+                  <Text style={styles.resolutionText} numberOfLines={2}>
+                    {item.shortTitle || item.title}
+                  </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           </View>
         )}
 
@@ -640,6 +686,10 @@ export default function HomeScreen() {
         )}
 
         {/* ════════════════════════════════════════════════════════ */}
+        {/* Section: Citizen Services & Grievance Redressal (नागरिक सेवा व तक्रार कक्ष) */}
+        <CitizenServicesQuickCard />
+
+        {/* ════════════════════════════════════════════════════════ */}
         {/* Section: Quick Links Shortcuts */}
         <View style={styles.quickLinksSection}>
           <View style={styles.quickLinksHeaderStrip}>
@@ -653,6 +703,8 @@ export default function HomeScreen() {
             contentContainerStyle={styles.quickLinksRow}
           >
             {[
+              { icon: "town-hall", label: "नागरिक सेवा", route: "/civic-services", bg: "#EFF6FF", color: "#2563EB" },
+              { icon: "card-account-details-outline", label: "सदस्य नोंदणी", route: "/party-membership", bg: "#FFF7ED", color: "#EA580C" },
               { icon: "file-document-outline", label: "योजना", route: "/documents", bg: "#FEF3C7", color: "#D97706" },
               { icon: "alert-circle-outline", label: "समस्या", route: "/report-issue", bg: "#FFF1F2", color: "#E11D48" },
               { icon: "calendar-month", label: "कार्यक्रम", route: "/events", bg: "#ECFDF5", color: "#059669" },
@@ -1444,6 +1496,28 @@ const styles = StyleSheet.create({
     borderColor: "#FED7AA",
     zIndex: 10,
   },
+  candidatePhotoAvatarWrap: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 3,
+    borderColor: "#EA580C",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+    shadowColor: "#EA580C",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 5,
+    overflow: "hidden",
+  },
+  candidatePhotoAvatar: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+  },
   candidateBadgeRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1509,8 +1583,8 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 2,
   },
-  candidateEnglishSub: {
-    fontSize: 13,
+  candidateDesignationSub: {
+    fontSize: 12.5,
     fontWeight: "700",
     color: "#4B5563",
     includeFontPadding: false,
@@ -1594,11 +1668,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  // "माझे प्रमुख संकल्प" Section
-  resolutionsSection: {
-    marginTop: 20,
-    paddingHorizontal: 16,
-  },
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1630,41 +1699,128 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#E05300",
   },
-  resolutionsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+
+  // "माझे प्रमुख संकल्प" Section (3 Core Pillars & Horizontal Slider)
+  resolutionsSection: {
+    marginTop: 20,
+  },
+  pillarsContainer: {
+    paddingHorizontal: 16,
     gap: 10,
+    marginBottom: 6,
+  },
+  pillarCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  pillarIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pillarContent: {
+    flex: 1,
+  },
+  pillarTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  pillarTag: {
+    fontSize: 10.5,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  pillarBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  pillarBadgeText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+  },
+  pillarTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#1C1917",
+  },
+  pillarSubtitle: {
+    fontSize: 12,
+    color: "#4B5563",
+    marginTop: 2,
+  },
+  subSliderTitle: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#4B5563",
+  },
+  resolutionsSliderScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 12,
   },
   resolutionCard: {
-    flex: 1,
+    width: 145,
+    minHeight: 124,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     alignItems: "center",
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: "#F0EFEA",
+    borderWidth: 1.5,
+    borderColor: "#FED7AA",
   },
   resolutionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+  },
+  resolutionLogoImage: {
+    width: 32,
+    height: 32,
   },
   resolutionText: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 12.5,
+    fontWeight: "900",
     color: "#1C1917",
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 17,
+  },
+  sliderIndicatorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  sliderIndicatorText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#E05300",
   },
 
   // Custom Ads Section

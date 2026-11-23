@@ -13,6 +13,7 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+!keystore_backup/upload-keystore.jks
 *.p8
 *.p12
 *.key
@@ -29,6 +30,8 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+!keystore_backup/upload_certificate.pem
+!upload_certificate.pem
 
 # Environment files
 .env

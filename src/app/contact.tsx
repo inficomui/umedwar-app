@@ -250,7 +250,7 @@ export default function ContactScreen() {
                 “ {displayQuote} ”
               </Text>
               <Text style={styles.heroCandidateName} numberOfLines={1}>
-                {candidate?.englishName || candidate?.name || "Mr. Sachin Malik"}
+                {candidate?.name || ""}
               </Text>
               <Text style={styles.heroDesignation} numberOfLines={1}>
                 {candidate?.designation || "शिवसेना अधिकृत उमेदवार"}
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F7F4",
   },
   scrollContent: {
-    paddingBottom: 28,
+    paddingBottom: 100,
   },
 
   // Top Header
@@ -871,57 +871,58 @@ const styles = StyleSheet.create({
   inputsRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   halfInputWrap: {
     flex: 1,
   },
   fullInputWrap: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   inputInner: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FAF9F6",
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: "#E7E5E4",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    height: 42,
-    gap: 6,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 48,
+    gap: 8,
   },
   input: {
     flex: 1,
-    fontSize: 12.5,
+    fontSize: 13.5,
     color: "#1C1917",
-    paddingVertical: 0,
+    paddingVertical: 8,
   },
   messageInputWrap: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
   messageInner: {
     backgroundColor: "#FAF9F6",
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: "#E7E5E4",
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 12,
+    padding: 12,
   },
   messageIconRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   messageLabel: {
-    fontSize: 12,
+    fontSize: 12.5,
     color: "#78716C",
-    fontWeight: "600",
+    fontWeight: "700",
   },
   messageInput: {
-    fontSize: 12.5,
+    fontSize: 13.5,
     color: "#1C1917",
-    minHeight: 65,
+    minHeight: 85,
     padding: 0,
+    textAlignVertical: "top",
   },
   charCount: {
     fontSize: 10,

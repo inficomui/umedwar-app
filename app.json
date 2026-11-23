@@ -2,7 +2,7 @@
   "expo": {
     "name": "सचिन मलिक - Sachin Malik",
     "slug": "sachin-malik",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sachin-malik",
@@ -16,7 +16,7 @@
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "versionCode": 4,
+      "versionCode": 5,
       "predictiveBackGestureEnabled": false,
       "package": "com.misachinmalik",
       "googleServicesFile": "./google-services.json"

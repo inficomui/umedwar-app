@@ -1,0 +1,636 @@
+========================================================================================
+ELECTION CAMPAIGN APP - BACKEND & ADMIN PANEL COMPLETE UPDATE GUIDE
+========================================================================================
+Project: Candidate Shri Sachin Malik Campaign Mobile App & Election CRM
+Date: November 2026
+Target Environment: Node.js / Express.js / MySQL (LiteSpeed / cPanel Backend)
+Domain: https://backend.misachinmalik.in
+
+----------------------------------------------------------------------------------------
+TABLE OF CONTENTS
+----------------------------------------------------------------------------------------
+1. RECENT FRONTEND ARCHITECTURAL UPDATES (काय बदल झाले आहेत?)
+2. SECTION 1: CANDIDATE PROFILE & SHOWCASE CARD BACKEND SPECIFICATION
+   2.1 Database Schema & Migration for `app_config`
+   2.2 Exact SQL UPDATE Query (Remove "Mr. Sachin Malik" & Set New Photo)
+   2.3 API Endpoints & Controller Code for Candidate Profile
+3. SECTION 2: "माझे प्रमुख संकल्प" (SANKALP CMS) BACKEND SPECIFICATION
+   3.1 Database Schema for `pramukh_sankalp`
+   3.2 SQL Seed Data (3 Active Live Resolutions)
+   3.3 Mobile App Public REST Endpoints (`/api/v1/sankalp` & `/api/v1/sankalp/:slugOrId`)
+   3.4 Admin Panel CRUD Endpoints with Rich Text (Word-Style Editor) & Image Upload
+   3.5 Complete Node.js / Express.js Controller & Route Code
+4. FILE UPLOAD CONFIGURATION (Multer for Profile & Sankalp Logos)
+5. ADMIN PANEL CMS FORM REQUIREMENTS & HTML/REACT TEMPLATES
+6. VERIFICATION CURL COMMANDS FOR BACKEND DEVELOPERS
+
+========================================================================================
+1. RECENT FRONTEND ARCHITECTURAL UPDATES (काय बदल झाले आहेत?)
+========================================================================================
+In the mobile application, the following updates have been finalized and verified:
+
+1. Candidate Showcase Card (Next to Carousel on Home Screen):
+   - A prominent 92x92 circular portrait avatar with an orange/gold ring border has been
+     added at the top of the card.
+   - The card is 100% dynamic and bound to the backend `/api/v1/app-config` endpoint.
+   - The hardcoded English name "Mr. Sachin Malik" has been COMPLETELY REMOVED from the card.
+   - The card now displays:
+     * Candidate Official Photo (from `candidatePhotoUrl`)
+     * Party badge: "🏹 " + `partyShortName`
+     * Honorific badge: "★ " + `candidateHonorific` + " ★"
+     * Bold candidate Marathi name: `candidateName`
+     * Designation & Constituency: `candidateDesignation` • `candidateConstituency`
+
+2. "माझे प्रमुख संकल्प" (Major Resolutions / Pledges Module):
+   - All 25 static dummy resolutions have been permanently purged.
+   - The mobile app strictly displays only active dynamic records from the backend CMS:
+     * Home Slider: GET /api/v1/sankalp
+     * Detail Screen: GET /api/v1/sankalp/:slugOrId
+   - The detail screen displays the uploaded logo/icon, main heading, and renders the rich
+     document content formatted in the Admin Word-style editor (Headings, Paragraphs, Lists,
+     Tables, Blockquotes, Media).
+   - The notice/suggestion form link button ("या संकल्पावर आपली सूचना नोंदवा") has been
+     REMOVED from the details page per instructions. Users directly view the policy roadmap
+     and can share it to WhatsApp.
+
+========================================================================================
+2. SECTION 1: CANDIDATE PROFILE & SHOWCASE CARD BACKEND SPECIFICATION
+========================================================================================
+
+----------------------------------------------------------------------------------------
+2.1 Database Schema for `app_config` (MySQL)
+----------------------------------------------------------------------------------------
+If not already created, ensure the `app_config` table has the following columns:
+
+```sql
+CREATE TABLE IF NOT EXISTS `app_config` (
+  `id` VARCHAR(50) NOT NULL PRIMARY KEY DEFAULT 'default_config',
+  `candidate_name` VARCHAR(255) NOT NULL,
+  `candidate_english_name` VARCHAR(255) NULL DEFAULT '',
+  `candidate_honorific` VARCHAR(255) NOT NULL,
+  `candidate_designation` VARCHAR(255) NOT NULL,
+  `candidate_constituency` VARCHAR(255) NOT NULL,
+  `candidate_ward` VARCHAR(100) NULL,
+  `candidate_photo_url` VARCHAR(500) NULL,
+  `candidate_slogan` VARCHAR(255) NULL,
+  `candidate_appeal` TEXT NULL,
+  `candidate_tagline` VARCHAR(255) NULL,
+  `candidate_biography` TEXT NULL,
+  `party_name` VARCHAR(100) NOT NULL DEFAULT 'शिवसेना',
+  `party_short_name` VARCHAR(50) NOT NULL DEFAULT 'शिवसेना',
+  `party_faction` VARCHAR(50) NULL DEFAULT '(शिंदे गट)',
+  `party_tagline` VARCHAR(255) NULL,
+  `party_symbol_name` VARCHAR(100) NULL DEFAULT 'निवडणूक चिन्ह: धनुष्यबाण',
+  `party_symbol_icon` VARCHAR(20) NULL DEFAULT '🏹',
+  `party_logo_url` VARCHAR(500) NULL,
+  `leader_prefix` VARCHAR(100) NULL,
+  `leader_name` VARCHAR(255) NULL,
+  `leader_english_name` VARCHAR(255) NULL,
+  `leader_title` VARCHAR(255) NULL,
+  `leader_photo_url` VARCHAR(500) NULL,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+----------------------------------------------------------------------------------------
+2.2 Exact SQL UPDATE Query (Execute in phpMyAdmin / MySQL CLI)
+----------------------------------------------------------------------------------------
+Run this query on `backend.misachinmalik.in` MySQL database to immediately synchronize
+the candidate card with the official photo and remove "Mr. Sachin Malik":
+
+```sql
+UPDATE `app_config`
+SET 
+  `candidate_name` = 'श्री. सचिन लक्ष्मणराव मलिक पाटिल',
+  `candidate_english_name` = '',
+  `candidate_honorific` = 'कोपरगाव तालुक्याचे कार्यसम्राट व लोकप्रिय नेते',
+  `candidate_designation` = 'शिवसेना अधिकृत उमेदवार',
+  `candidate_constituency` = 'कोपरगाव विधानसभा मतदारसंघ',
+  `candidate_photo_url` = 'https://backend.misachinmalik.in/public/uploads/umedwar.png',
+  `candidate_slogan` = 'जनतेसाठी, जनतेसोबत सदैव तत्पर!',
+  `candidate_appeal` = 'धनुष्यबाण चिन्हासमोरील बटण दाबून प्रचंड बहुमताने विजयी करा!',
+  `candidate_tagline` = 'माणसांसाठी काम करणारा, आपला माणूस !',
+  `party_short_name` = 'शिवसेना',
+  `party_faction` = '(शिंदे गट)',
+  `updated_at` = NOW()
+WHERE `id` = 'default_config' OR 1=1
+LIMIT 1;
+```
+
+----------------------------------------------------------------------------------------
+2.3 Candidate Profile API Response (`GET /api/v1/app-config`)
+----------------------------------------------------------------------------------------
+When the mobile app requests `GET /api/v1/app-config`, the `config` payload should be:
+
+```json
+{
+  "success": true,
+  "message": "App configuration fetched successfully",
+  "data": {
+    "config": {
+      "candidateHonorific": "कोपरगाव तालुक्याचे कार्यसम्राट व लोकप्रिय नेते",
+      "candidateName": "श्री. सचिन लक्ष्मणराव मलिक पाटिल",
+      "candidateEnglishName": "",
+      "candidateDesignation": "शिवसेना अधिकृत उमेदवार",
+      "candidateConstituency": "कोपरगाव विधानसभा मतदारसंघ",
+      "candidatePhotoUrl": "https://backend.misachinmalik.in/public/uploads/umedwar.png",
+      "candidateSlogan": "जनतेसाठी, जनतेसोबत सदैव तत्पर!",
+      "candidateAppeal": "धनुष्यबाण चिन्हासमोरील बटण दाबून प्रचंड बहुमताने विजयी करा!",
+      "candidateTagline": "माणसांसाठी काम करणारा, आपला माणूस !",
+      "partyName": "शिवसेना",
+      "partyShortName": "शिवसेना",
+      "partyFaction": "(शिंदे गट)",
+      "partySymbolName": "निवडणूक चिन्ह: धनुष्यबाण",
+      "partySymbolIcon": "🏹",
+      "partyLogoUrl": "https://backend.misachinmalik.in/public/uploads/shivsena_logo-1789802475588-41d01256.png"
+    }
+  }
+}
+```
+
+========================================================================================
+3. SECTION 2: "माझे प्रमुख संकल्प" (SANKALP CMS) BACKEND SPECIFICATION
+========================================================================================
+
+----------------------------------------------------------------------------------------
+3.1 Database Schema for `pramukh_sankalp` Table
+----------------------------------------------------------------------------------------
+This table stores both the compact card summary (for mobile home screen / vision carousel)
+and the complete Word-style rich document HTML (for deep-dive resolution detail screen):
+
+```sql
+CREATE TABLE IF NOT EXISTS `pramukh_sankalp` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `title` VARCHAR(255) NOT NULL COMMENT 'मराठी मुख्य शीर्षक e.g. चांगला पायाभूत विकास',
+  `slug` VARCHAR(150) NOT NULL UNIQUE COMMENT 'URL slug e.g. changla-payabhut-vikas',
+  `icon_image` VARCHAR(500) NULL COMMENT 'अपलोड केलेल्या लोगो/आयकॉनचा URL',
+  `short_description` VARCHAR(500) NULL COMMENT 'थोडक्यात माहिती / Subtitle',
+  `button_text` VARCHAR(100) NOT NULL DEFAULT 'अधिक माहिती पहा',
+  `content` LONGTEXT NOT NULL COMMENT 'Word-style rich HTML document formatted from Admin Editor',
+  `content_format` ENUM('html', 'json') NOT NULL DEFAULT 'html',
+  `display_order` INT NOT NULL DEFAULT 0 COMMENT 'क्रमानुसार मांडणीसाठी क्रम',
+  `status` ENUM('active', 'inactive', 'draft') NOT NULL DEFAULT 'active',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_sankalp_status_order` (`status`, `display_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+----------------------------------------------------------------------------------------
+3.2 Live Database Seed SQL (3 Currently Active Live Resolutions)
+----------------------------------------------------------------------------------------
+Execute this SQL if setting up a fresh database or restoring default active pledges:
+
+```sql
+INSERT INTO `pramukh_sankalp` (`id`, `title`, `slug`, `icon_image`, `short_description`, `button_text`, `content`, `display_order`, `status`)
+VALUES
+(1,
+ 'चांगला पायाभूत विकास',
+ 'changla-payabhut-vikas',
+ 'https://backend.misachinmalik.in/public/uploads/icon.png',
+ 'आधुनिक रस्ते, उड्डाणपूल व मजबूत पायाभूत सुविधा',
+ 'अधिक माहिती पहा',
+ '<h2>चांगला पायाभूत विकास</h2><p><strong>आधुनिक रस्ते, उड्डाणपूल व मजबूत पायाभूत सुविधा</strong></p><p>मतदारसंघातील सर्व अंतर्गत व प्रमुख रस्त्यांचे काँक्रीटीकरण, जलनिःसारण आणि ड्रेनेज व्यवस्था.</p><ul><li>मतदारसंघातील विकासकामे वेगाने पूर्ण करणे</li><li>नागरिकांच्या समस्यांचे तातडीने निवारण</li><li>पारदर्शक व लोकाभिमुख कारभार</li></ul>',
+ 0,
+ 'active'
+),
+(2,
+ 'युवांसाठी नवीन संधी',
+ 'yuvansathi-navin-sandhi',
+ 'https://backend.misachinmalik.in/public/uploads/icon.png',
+ 'रोजगार मार्गदर्शन, कौशल्य विकास आणि स्टार्टअप सहाय्य',
+ 'अधिक माहिती पहा',
+ '<h2>युवांसाठी नवीन संधी</h2><p><strong>रोजगार मार्गदर्शन, कौशल्य विकास आणि स्टार्टअप सहाय्य</strong></p><p>कोपरगाव तालुक्यातील सुशिक्षित बेरोजगारांसाठी स्पर्धा परीक्षा मार्गदर्शन केंद्रे, रोजगार मेळावे व युवा उद्योजकता प्रोत्साहन.</p><ul><li>मोफत कौशल्य विकास प्रशिक्षण केंद्रे स्थापन करणे</li><li>स्थानिक उद्योगांमध्ये स्थानिक युवकांना प्राधान्य</li><li>स्पर्धा परीक्षा अभ्यासिका व ई-लायब्ररी सुविधा</li></ul>',
+ 1,
+ 'active'
+),
+(3,
+ 'सर्वसमावेशक समाज विकास',
+ 'sarvasamaveshak-samaj-vikas',
+ 'https://backend.misachinmalik.in/public/uploads/icon.png',
+ 'आरोग्य, शिक्षण व महिला सक्षमीकरणास सर्वोच्च प्राधान्य',
+ 'अधिक माहिती पहा',
+ '<h2>सर्वसमावेशक समाज विकास</h2><p><strong>आरोग्य, शिक्षण व महिला सक्षमीकरणास सर्वोच्च प्राधान्य</strong></p><p>समाजातील प्रत्येक घटकाचा सन्मान, महिला बचत गटांना भांडवल सहाय्य, आणि तळागाळातील नागरिकांपर्यंत आरोग्य सुविधांचा विस्तार.</p><ul><li>महिला बचत गटांच्या उत्पादनांसाठी हक्काची बाजारपेठ</li><li>ज्येष्ठ नागरिक व दिव्यांगांसाठी विशेष कल्याणकारी योजना</li><li>मोफत आरोग्य शिबिरे व औषधोपचार सहाय्य</li></ul>',
+ 2,
+ 'active'
+)
+ON DUPLICATE KEY UPDATE 
+  `title` = VALUES(`title`),
+  `short_description` = VALUES(`short_description`),
+  `content` = VALUES(`content`),
+  `status` = VALUES(`status`);
+```
+
+----------------------------------------------------------------------------------------
+3.3 Public Endpoints Specification (Consumed by Mobile App)
+----------------------------------------------------------------------------------------
+
+### 1. `GET /api/v1/sankalp`
+Returns all active Sankalp cards for the home slider and resolutions listing screen.
+
+- Request Headers:
+  `Accept: application/json`
+
+- Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Active Sankalp cards fetched successfully",
+  "data": [
+    {
+      "id": 1,
+      "title": "चांगला पायाभूत विकास",
+      "slug": "changla-payabhut-vikas",
+      "icon_image": "https://backend.misachinmalik.in/public/uploads/icon.png",
+      "short_description": "आधुनिक रस्ते, उड्डाणपूल व मजबूत पायाभूत सुविधा",
+      "button_text": "अधिक माहिती पहा",
+      "display_order": 0
+    },
+    {
+      "id": 2,
+      "title": "युवांसाठी नवीन संधी",
+      "slug": "yuvansathi-navin-sandhi",
+      "icon_image": "https://backend.misachinmalik.in/public/uploads/icon.png",
+      "short_description": "रोजगार मार्गदर्शन, कौशल्य विकास आणि स्टार्टअप सहाय्य",
+      "button_text": "अधिक माहिती पहा",
+      "display_order": 1
+    },
+    {
+      "id": 3,
+      "title": "सर्वसमावेशक समाज विकास",
+      "slug": "sarvasamaveshak-samaj-vikas",
+      "icon_image": "https://backend.misachinmalik.in/public/uploads/icon.png",
+      "short_description": "आरोग्य, शिक्षण व महिला सक्षमीकरणास सर्वोच्च प्राधान्य",
+      "button_text": "अधिक माहिती पहा",
+      "display_order": 2
+    }
+  ]
+}
+```
+
+---
+
+### 2. `GET /api/v1/sankalp/:slugOrId`
+Fetches full rich document details of a specific Sankalp by slug (e.g. `changla-payabhut-vikas`)
+or numeric ID (e.g. `1`).
+
+- Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Sankalp details fetched successfully",
+  "data": {
+    "id": 1,
+    "title": "चांगला पायाभूत विकास",
+    "slug": "changla-payabhut-vikas",
+    "icon_image": "https://backend.misachinmalik.in/public/uploads/icon.png",
+    "short_description": "आधुनिक रस्ते, उड्डाणपूल व मजबूत पायाभूत सुविधा",
+    "button_text": "अधिक माहिती पहा",
+    "content": "<h2>चांगला पायाभूत विकास</h2><p><strong>आधुनिक रस्ते, उड्डाणपूल व मजबूत पायाभूत सुविधा</strong></p><p>मतदारसंघातील सर्व अंतर्गत व प्रमुख रस्त्यांचे काँक्रीटीकरण, जलनिःसारण आणि ड्रेनेज व्यवस्था.</p><ul><li>मतदारसंघातील विकासकामे वेगाने पूर्ण करणे</li><li>नागरिकांच्या समस्यांचे तातडीने निवारण</li><li>पारदर्शक व लोकाभिमुख कारभार</li></ul>",
+    "content_format": "html",
+    "display_order": 0,
+    "status": "active",
+    "created_at": "2026-11-23T15:03:33.000Z",
+    "updated_at": "2026-11-23T15:03:33.000Z"
+  }
+}
+```
+
+- Not Found Response (`404 Not Found`):
+```json
+{
+  "success": false,
+  "message": "Sankalp not found or currently inactive",
+  "data": null
+}
+```
+
+----------------------------------------------------------------------------------------
+3.4 Admin Panel CMS Endpoints (For Election Admin CRM)
+----------------------------------------------------------------------------------------
+
+### 1. `POST /api/v1/admin/sankalp` (Create New Sankalp)
+- Headers:
+  `Authorization: Bearer <ADMIN_JWT_TOKEN>`
+  `Content-Type: multipart/form-data` OR `application/json`
+
+- Body Parameters:
+  * `title` (string, required): मराठी नाव e.g., "स्वच्छ व सुंदर कोपरगाव"
+  * `slug` (string, optional): e.g., "swachh-va-sundar-kopargaon" (auto-generated if omitted)
+  * `short_description` (string, optional): Card subtitle
+  * `button_text` (string, optional): Default "अधिक माहिती पहा"
+  * `content` (string HTML, required): Sanitized Word-style HTML document
+  * `display_order` (integer, optional): e.g., 3
+  * `status` (string, optional): 'active' | 'inactive' | 'draft'
+  * `icon_image` (file upload): Image file (PNG/JPG/WEBP)
+
+### 2. `PUT /api/v1/admin/sankalp/:id` (Update Existing Sankalp)
+Updates all fields or partial fields, including updating the rich HTML content.
+
+### 3. `DELETE /api/v1/admin/sankalp/:id` (Delete or Soft-Delete)
+Removes the pledge from public listing.
+
+========================================================================================
+4. COMPLETE NODE.JS / EXPRESS.JS CONTROLLER & ROUTER IMPLEMENTATION
+========================================================================================
+
+Place this code inside your backend directory:
+
+### File: `controllers/sankalpController.js`
+```javascript
+const db = require('../config/db'); // Your MySQL pool connection
+
+// Helper: Slugify string
+function slugify(text) {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\u0900-\u097F\-]+/g, '')
+    .replace(/\-\-+/g, '-');
+}
+
+exports.getActiveCards = async (req, res) => {
+  try {
+    const query = `
+      SELECT id, title, slug, icon_image, short_description, button_text, display_order
+      FROM pramukh_sankalp
+      WHERE status = 'active'
+      ORDER BY display_order ASC, id ASC
+    `;
+    const [rows] = await db.query(query);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Active Sankalp cards fetched successfully',
+      data: rows
+    });
+  } catch (error) {
+    console.error('Error fetching active Sankalp cards:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching Sankalp cards',
+      data: []
+    });
+  }
+};
+
+exports.getDetailBySlugOrId = async (req, res) => {
+  try {
+    const { slugOrId } = req.params;
+    if (!slugOrId) {
+      return res.status(400).json({ success: false, message: 'Slug or ID is required' });
+    }
+
+    const query = `
+      SELECT id, title, slug, icon_image, short_description, button_text, 
+             content, content_format, display_order, status, created_at, updated_at
+      FROM pramukh_sankalp
+      WHERE (slug = ? OR id = ?) AND status = 'active'
+      LIMIT 1
+    `;
+    const [rows] = await db.query(query, [slugOrId, slugOrId]);
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sankalp not found or inactive',
+        data: null
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Sankalp details fetched successfully',
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error('Error fetching Sankalp detail:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching Sankalp details',
+      data: null
+    });
+  }
+};
+
+// Admin: Create Sankalp
+exports.createSankalp = async (req, res) => {
+  try {
+    const { title, slug, short_description, button_text, content, display_order, status } = req.body;
+    if (!title || !content) {
+      return res.status(422).json({ success: false, message: 'Title and content are required' });
+    }
+
+    const finalSlug = slug ? slugify(slug) : slugify(title);
+    let icon_image = req.body.icon_image || null;
+
+    if (req.file) {
+      icon_image = `${req.protocol}://${req.get('host')}/public/uploads/${req.file.filename}`;
+    }
+
+    const insertQuery = `
+      INSERT INTO pramukh_sankalp 
+      (title, slug, icon_image, short_description, button_text, content, display_order, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    const [result] = await db.query(insertQuery, [
+      title.trim(),
+      finalSlug,
+      icon_image,
+      short_description ? short_description.trim() : null,
+      button_text ? button_text.trim() : 'अधिक माहिती पहा',
+      content,
+      display_order ? parseInt(display_order, 10) : 0,
+      status || 'active'
+    ]);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Sankalp created successfully',
+      data: { id: result.insertId, slug: finalSlug }
+    });
+  } catch (error) {
+    console.error('Error creating Sankalp:', error);
+    return res.status(500).json({ success: false, message: 'Failed to create Sankalp' });
+  }
+};
+
+// Admin: Update Sankalp
+exports.updateSankalp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, slug, short_description, button_text, content, display_order, status } = req.body;
+
+    let icon_image = req.body.icon_image;
+    if (req.file) {
+      icon_image = `${req.protocol}://${req.get('host')}/public/uploads/${req.file.filename}`;
+    }
+
+    const updateQuery = `
+      UPDATE pramukh_sankalp
+      SET 
+        title = COALESCE(?, title),
+        slug = COALESCE(?, slug),
+        icon_image = COALESCE(?, icon_image),
+        short_description = COALESCE(?, short_description),
+        button_text = COALESCE(?, button_text),
+        content = COALESCE(?, content),
+        display_order = COALESCE(?, display_order),
+        status = COALESCE(?, status),
+        updated_at = NOW()
+      WHERE id = ?
+    `;
+
+    await db.query(updateQuery, [
+      title ? title.trim() : null,
+      slug ? slugify(slug) : null,
+      icon_image || null,
+      short_description ? short_description.trim() : null,
+      button_text ? button_text.trim() : null,
+      content || null,
+      display_order !== undefined ? parseInt(display_order, 10) : null,
+      status || null,
+      id
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Sankalp updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating Sankalp:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update Sankalp' });
+  }
+};
+```
+
+---
+
+### File: `routes/sankalpRoutes.js`
+```javascript
+const express = require('express');
+const router = express.Router();
+const sankalpController = require('../controllers/sankalpController');
+const upload = require('../middleware/uploadMiddleware'); // Multer middleware
+const authAdminMiddleware = require('../middleware/authAdmin'); // JWT Admin auth
+
+// Public Routes (Mobile App)
+router.get('/sankalp', sankalpController.getActiveCards);
+router.get('/sankalp/:slugOrId', sankalpController.getDetailBySlugOrId);
+
+// Admin CMS Protected Routes
+router.post('/admin/sankalp', authAdminMiddleware, upload.single('icon_image'), sankalpController.createSankalp);
+router.put('/admin/sankalp/:id', authAdminMiddleware, upload.single('icon_image'), sankalpController.updateSankalp);
+
+module.exports = router;
+```
+
+========================================================================================
+5. MULTER FILE UPLOAD SETUP
+========================================================================================
+
+### File: `middleware/uploadMiddleware.js`
+```javascript
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const uploadDir = path.join(__dirname, '../public/uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const cleanBaseName = path.basename(file.originalname, ext).replace(/[^\w]/g, '_');
+    cb(null, `${cleanBaseName}-${Date.now()}${ext}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowed = /jpeg|jpg|png|webp|svg/;
+  const isExt = allowed.test(path.extname(file.originalname).toLowerCase());
+  const isMime = allowed.test(file.mimetype);
+  if (isExt && isMime) {
+    return cb(null, true);
+  }
+  cb(new Error('Only JPG, PNG, WEBP, and SVG image files are allowed!'));
+};
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  fileFilter
+});
+
+module.exports = upload;
+```
+
+========================================================================================
+6. ADMIN PANEL CMS FORM (WORD-STYLE EDITOR INTEGRATION)
+========================================================================================
+
+In the Admin Panel (`/admin/sankalp/create` or `/admin/sankalp/edit/:id`):
+
+1. **Card Section (कॉर्ड माहिती):**
+   - **शीर्षक (Title):** `<input type="text" name="title" placeholder="उदा. चांगला पायाभूत विकास" required />`
+   - **लोगो/आयकॉन (Icon/Logo):** `<input type="file" name="icon_image" accept="image/*" />`
+   - **थोडक्यात वर्णन (Short Description):** `<textarea name="short_description" rows="2" placeholder="कॉर्डवर दिसणारे संक्षिप्त वाक्य"></textarea>`
+   - **बटन टेक्स्ट (Button Text):** `<input type="text" name="button_text" value="अधिक माहिती पहा" />`
+   - **क्रम (Display Order):** `<input type="number" name="display_order" value="0" />`
+   - **स्थिती (Status):** `<select name="status"><option value="active">Active (सक्रिय)</option><option value="inactive">Inactive</option></select>`
+
+2. **Full Document Section (सविस्तर विकास आराखडा - Word Style Rich Editor):**
+   - Integrate Quill.js, TinyMCE, or CKEditor:
+   ```html
+   <!-- TinyMCE CDN Example -->
+   <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+   <script>
+     tinymce.init({
+       selector: '#sankalpContentEditor',
+       plugins: 'table lists link image code heading',
+       toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | table | link image',
+       height: 500,
+       content_style: 'body { font-family: "Noto Sans Devanagari", sans-serif; font-size: 16px; line-height: 1.6; }'
+     });
+   </script>
+   <textarea id="sankalpContentEditor" name="content"></textarea>
+   ```
+
+3. Note on Notice Form:
+   - Notice/suggestion form links are no longer needed on the resolution details page.
+   - Do NOT add a form URL input field, as the voter app focuses on the clean vision document.
+
+========================================================================================
+7. VERIFICATION CURL COMMANDS FOR BACKEND DEVELOPERS
+========================================================================================
+
+Run these commands in terminal to verify backend endpoints:
+
+1. Test Candidate App Config:
+```bash
+curl -s https://backend.misachinmalik.in/api/v1/app-config | json_pp | head -n 35
+```
+Expected: `candidateName` is "श्री. सचिन लक्ष्मणराव मलिक पाटिल", `candidateEnglishName` is empty, `candidatePhotoUrl` points to a valid image URL.
+
+2. Test Active Sankalp Cards:
+```bash
+curl -s https://backend.misachinmalik.in/api/v1/sankalp | json_pp
+```
+Expected: 200 OK with array containing active cards (`changla-payabhut-vikas`, etc.).
+
+3. Test Sankalp Detail Endpoint:
+```bash
+curl -s https://backend.misachinmalik.in/api/v1/sankalp/changla-payabhut-vikas | json_pp | head -n 25
+```
+Expected: 200 OK with `data.content` containing formatted HTML document.
+
+========================================================================================
+END OF BACKEND UPDATE GUIDE
+========================================================================================
