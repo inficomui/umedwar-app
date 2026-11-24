@@ -39,6 +39,23 @@ Captured Citizen Fields:
   * Message (`message`): Citizen query, problem or feedback (Mandatory)
   * Source (`source`): 'home_page_quick_form' | 'contact_screen' | 'mobile_app'
 
+1.1 AUTOMATIC PINCODE-TO-ADDRESS AUTO-FETCH (पिन कोडवरून पत्ता मिळवणे):
+--------------------------------------------------------------------------------
+The mobile application features real-time postal address lookup:
+- When the user enters a 6-digit PIN code (e.g., 423601), the app queries the
+  India Post Pincode API:
+    GET https://api.postalpincode.in/pincode/{pincode}
+- It automatically resolves:
+    * Primary Post Office Name (e.g. "Kopergaon")
+    * Taluka / Block (e.g. "Kopergaon")
+    * District (e.g. "Ahmed Nagar / Ahilyanagar")
+    * State (e.g. "Maharashtra")
+    * All affiliated village / area post offices
+- If the Address field is empty, it automatically populates the formatted address.
+- It also renders interactive village suggestion chips (उदा. कोपरगाव, कोकमठाण,
+  चांदेकासारे...) allowing the citizen to tap their exact village to append/set.
+- Cached in-memory to prevent repeated network requests.
+
 Both touchpoints send their payload to the unified endpoint:
   POST https://backend.misachinmalik.in/api/v1/inquiries
 

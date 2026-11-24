@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -21,6 +22,7 @@ import { Icon } from "react-native-paper";
 import { useCampaign } from "../context/CampaignContext";
 import { BottomTabBar } from "../components/BottomTabBar";
 import { inquiryApi } from "../services/inquiryApi";
+import { fetchAddressByPincode } from "../services/pincodeService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -75,6 +77,57 @@ export default function ContactScreen() {
   const [pincode, setPincode] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingAddress, setIsFetchingAddress] = useState(false);
+  const [pincodeLocationHint, setPincodeLocationHint] = useState<string | null>(null);
+  const [pincodeVillageList, setPincodeVillageList] = useState<string[]>([]);
+
+  const lookupContactPincode = async (cleanPin: string) => {
+    if (cleanPin.length !== 6) {
+      setPincodeLocationHint(null);
+      setPincodeVillageList([]);
+      return;
+    }
+    setIsFetchingAddress(true);
+    try {
+      const details = await fetchAddressByPincode(cleanPin);
+      if (details) {
+        setPincodeLocationHint(details.shortSummary);
+        setPincodeVillageList(details.allOffices);
+        setAddress((prev) => {
+          if (!prev.trim()) {
+            return details.formattedAddress;
+          }
+          return prev;
+        });
+      } else {
+        setPincodeLocationHint(null);
+        setPincodeVillageList([]);
+      }
+    } catch (e) {
+      console.log("Pincode lookup error:", e);
+    } finally {
+      setIsFetchingAddress(false);
+    }
+  };
+
+  const handlePincodeChange = (text: string) => {
+    const clean = text.replace(/\D/g, "").slice(0, 6);
+    setPincode(clean);
+    if (clean.length === 6) {
+      lookupContactPincode(clean);
+    } else {
+      setPincodeLocationHint(null);
+      setPincodeVillageList([]);
+    }
+  };
+
+  const handleSelectVillage = (villageName: string) => {
+    if (pincodeLocationHint) {
+      setAddress(`${villageName}, ${pincodeLocationHint}`);
+    } else {
+      setAddress(`${villageName}, ${address}`.trim());
+    }
+  };
 
   const handlePhoneCall = () => {
     Linking.openURL(`tel:${contact.helpline1.replace(/\s+/g, "")}`);
@@ -112,7 +165,13 @@ export default function ContactScreen() {
       if (currentUser.mobile && !mobile) setMobile(currentUser.mobile);
       if (currentUser.email && !email) setEmail(currentUser.email);
       if ((currentUser as any)?.address && !address) setAddress((currentUser as any).address);
-      if ((currentUser as any)?.pincode && !pincode) setPincode((currentUser as any).pincode);
+      if ((currentUser as any)?.pincode && !pincode) {
+        const pin = String((currentUser as any).pincode).replace(/\D/g, "").slice(0, 6);
+        setPincode(pin);
+        if (pin.length === 6 && !address) {
+          lookupContactPincode(pin);
+        }
+      }
     }
   }, [currentUser]);
 
@@ -440,8 +499,27 @@ export default function ContactScreen() {
               </View>
             </View>
 
-            {/* Input: Address & PIN Code Row */}
+            {/* Input: PIN Code & Address Row */}
             <View style={styles.inputsRow}>
+              {/* PIN Code */}
+              <View style={styles.halfInputWrap}>
+                <View style={styles.inputInner}>
+                  <Icon source="numeric" size={17} color="#78716C" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="पिन कोड (६ अंकी)"
+                    placeholderTextColor="#A8A29E"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    value={pincode}
+                    onChangeText={handlePincodeChange}
+                  />
+                  {isFetchingAddress && (
+                    <ActivityIndicator size="small" color="#EA580C" style={{ marginRight: 4 }} />
+                  )}
+                </View>
+              </View>
+
               {/* Address */}
               <View style={styles.halfInputWrap}>
                 <View style={styles.inputInner}>
@@ -455,23 +533,40 @@ export default function ContactScreen() {
                   />
                 </View>
               </View>
-
-              {/* PIN Code */}
-              <View style={styles.halfInputWrap}>
-                <View style={styles.inputInner}>
-                  <Icon source="numeric" size={17} color="#78716C" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="पिन कोड (६ अंकी)"
-                    placeholderTextColor="#A8A29E"
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    value={pincode}
-                    onChangeText={setPincode}
-                  />
-                </View>
-              </View>
             </View>
+
+            {/* Pincode Location Badge */}
+            {pincodeLocationHint ? (
+              <View style={styles.pincodeHintRow}>
+                <Icon source="check-circle" size={14} color="#16A34A" />
+                <Text style={styles.pincodeHintText}>
+                  स्थान सापडले: {pincodeLocationHint}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Village Suggestions */}
+            {pincodeVillageList.length > 1 ? (
+              <View style={styles.villagePickerRow}>
+                <Text style={styles.villagePickerLabel}>गाव / परिसर निवडा:</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.villageChipsScroll}
+                >
+                  {pincodeVillageList.slice(0, 12).map((villageName) => (
+                    <TouchableOpacity
+                      key={villageName}
+                      style={styles.villageChip}
+                      activeOpacity={0.8}
+                      onPress={() => handleSelectVillage(villageName)}
+                    >
+                      <Text style={styles.villageChipText}>{villageName}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
 
             {/* Input: Message Textarea */}
             <View style={styles.messageInputWrap}>
@@ -916,6 +1011,49 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginBottom: 12,
+  },
+  pincodeHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F0FDF4",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginBottom: 10,
+  },
+  pincodeHintText: {
+    fontSize: 12,
+    color: "#15803D",
+    fontWeight: "700",
+  },
+  villagePickerRow: {
+    marginBottom: 12,
+  },
+  villagePickerLabel: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#78716C",
+    marginBottom: 6,
+  },
+  villageChipsScroll: {
+    gap: 6,
+    paddingRight: 10,
+  },
+  villageChip: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  villageChipText: {
+    fontSize: 11.5,
+    color: "#1D4ED8",
+    fontWeight: "600",
   },
   halfInputWrap: {
     flex: 1,
