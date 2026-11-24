@@ -1,0 +1,1611 @@
+================================================================================
+CITIZEN SERVICES & GRIEVANCES REDRESSAL PIPELINE (नागरिक सेवा व तक्रार निवारण पाईपलाईन)
+BACKEND & WEB ADMIN PANEL COMPLETE DETAILED IMPLEMENTATION PLAN
+================================================================================
+Project: "मी सचिन मलिक" (Umedwar Mobile App & Web Admin Dashboard)
+Domain: https://backend.misachinmalik.in
+Target Module: "नागरिक सेवा व तक्रार निवारण व्यवस्थापन (Citizen Grievance Redressal Pipeline)"
+Author: Core Engineering Team
+Date: 24 November 2026
+Format: Technical Implementation Specification (.txt)
+================================================================================
+
+TABLE OF CONTENTS:
+1. EXECUTIVE SUMMARY & ROOT CAUSE ANALYSIS (तक्रारी का दिसत नव्हत्या?)
+2. COMPLETE 6-STAGE CITIZEN GRIEVANCE REDRESSAL LIFECYCLE (PIPELINE ARCHITECTURE)
+3. COMPLETE DATABASE SCHEMA SPECIFICATION (MySQL / PostgreSQL / Prisma)
+4. COMPLETE REST API ENDPOINTS CONTRACT (REQUEST & RESPONSE JSON)
+5. COMPLETE BACKEND CODE (Node.js / Express.js / TypeScript)
+6. LARAVEL / PHP CONTROLLER CODE (Alternative Backend Option)
+7. PRODUCTION WEB ADMIN PANEL UI COMPONENT (React.js / Next.js / Tailwind CSS)
+8. DATABASE SEED SCRIPT (All 26 Government Departments & Nodal Officers)
+9. VERIFICATION CURL COMMANDS & TROUBLESHOOTING GUIDE
+
+================================================================================
+1. EXECUTIVE SUMMARY & ROOT CAUSE ANALYSIS (तक्रारी का दिसत नव्हत्या?)
+================================================================================
+
+PROBLEM STATEMENT:
+When citizens submitted complaints through the "नागरिक सेवा व तक्रार" section in
+the mobile app, the complaints did not appear in the Web Admin Panel, and the
+pipeline (status progression, 24-hr SLA, officer assignment, actions) was not
+working.
+
+TECHNICAL ROOT CAUSE & FINDINGS:
+1. Data Silo Discrepancy:
+   - Channel A (`issues` table / `POST /api/v1/issues`):
+     Used by the old "समस्या नोंदवा (Report Issue)" screen. The existing Admin Panel
+     was hardcoded to only query `GET /api/v1/issues`.
+   - Channel B (`citizen_submissions` table / `POST /api/v1/citizen-services/submissions`):
+     Used by the 26-department "नागरिक सेवा व तक्रार" section. It stores data into
+     the `citizen_submissions` table.
+   - Because the Admin Panel dashboard was ONLY querying Channel A, submissions in
+     Channel B remained completely invisible to the admin!
+
+2. Missing Backend Pipeline Routes:
+   - When an admin attempts to assign an officer or log an action:
+     `POST /api/v1/admin/citizen-services/submissions/:id/action` returned HTTP 404 (Route not found).
+     `PUT /api/v1/admin/citizen-services/submissions/:id` returned HTTP 404.
+   - The backend lacked the pipeline endpoints for:
+     * Officer assignment (`/assign`)
+     * Timeline action logging (`/action`)
+     * 24-hour SLA first progress update (`/sla-update`)
+     * Grievance resolution with certificate/summary (`/resolve`)
+     * Grievance rejection with official reason (`/reject`)
+
+3. Missing Web Admin Panel Pipeline UI:
+   - The Web Admin Panel lacked a dedicated 26-department Kanban / pipeline board
+     with 24-hour SLA countdown clocks, officer assignment dropdowns, and timeline
+     auditing.
+
+THE RESOLUTION PROVIDED IN THIS GUIDE:
+- Mobile App Dual-Sync: Automatically syncs complaints to BOTH `citizen_submissions`
+  and `issues` tables, guaranteeing immediate visibility in the legacy complaints list.
+- Unified Backend Pipeline API: Fully implemented controller and routes for all
+  pipeline lifecycle stages.
+- Dedicated Web Admin Panel Pipeline Component: A production-ready React component
+  with live 24h SLA timers, officer assignment, and interactive citizen chat.
+
+
+================================================================================
+2. COMPLETE 6-STAGE CITIZEN GRIEVANCE REDRESSAL LIFECYCLE (PIPELINE ARCHITECTURE)
+================================================================================
+
+```
+[ 1. नवीन प्राप्त (Received) ] 
+       │  (२४-तास SLA टायमर सुरू होतो)
+       ▼
+[ 2. छाननी व पडताळणी (Under Review) ]
+       │  (प्राधान्यता: Normal / High / Urgent, संवेदनशीलता तपासणी)
+       ▼
+[ 3. विभाग व अधिकारी नेमणूक (Assigned to Officer) ]
+       │  (२६ शासकीय विभागांपैकी संबंधित विभाग व नोडल अधिकारी नेमणे)
+       ▼
+[ 4. २४-तास प्रथम प्रगती अद्यतन (First 24-Hr SLA Update) ]
+       │  (नागरिकाला पहिला अधिकृत प्रगती अहवाल देणे -> SLA Met ✅)
+       ▼
+[ 5. प्रत्यक्ष काम प्रगतीपथावर (In Progress / Action Initiated) ]
+       │  (जागेची पाहणी, ठेकेदार समन्वय, टाईमलाईन कृती नोंदणी)
+       ▼
+[ 6. निकाली / पूर्ण (Resolved / Redressed) ] ── किंवा ── [ फेटाळले (Rejected) ]
+   (निराकरण अहवाल, प्रमाणपत्र, SMS/WhatsApp/Push)           (अधिकृत कारणासह बंद)
+```
+
+STAGE DETAILS:
+- Stage 1: `received` (प्राप्त)
+  * Generated Reference Number (e.g. `CSK-2026-000003`).
+  * SLA Timer Initiated: `first_update_due_at = NOW() + INTERVAL 24 HOUR`.
+  * `sla_status` = 'pending'.
+
+- Stage 2: `under_review` (छाननी)
+  * Admin verifies citizen name, village, mobile, and complaint substance.
+  * Tags priority (`normal`, `high`, `urgent`) and `is_sensitive` (true/false).
+
+- Stage 3: `assigned` (वर्ग केले)
+  * Admin assigns the complaint to one of the 26 Government Departments.
+  * Assigns an official Nodal Officer (Name, Designation, Contact Number).
+  * Auto-logs timeline action: "तक्रार संबंधित अधिकारी [नाव, पद] यांच्याकडे वर्ग केली गेली."
+
+- Stage 4: `sla_updated` (२४-तास प्रथम प्रगती अद्यतन)
+  * Admin/Officer sends initial progress update:
+    e.g. "आपल्या अर्जाची संबंधित अधिकाऱ्यांशी चर्चा झाली असून प्रत्यक्ष पाहणी उद्या केली जाईल."
+  * `first_update_sent_at = NOW()`, `sla_status = 'met'`.
+  * If 24 hours lapse without an update, `sla_status = 'breached'` (Red warning badge).
+
+- Stage 5: `in_progress` (काम चालू)
+  * Ongoing timeline actions logged (site visits, material sanction, work commencement).
+  * Citizen can track every step in real-time in `src/app/submission-tracking.tsx`.
+
+- Stage 6: `resolved` (निकाली / पूर्ण)
+  * Admin/Officer logs resolution summary and uploads proof/certificate.
+  * Status set to `resolved`, `resolved_at = NOW()`.
+  * Automated Push Notification & WhatsApp message sent to citizen.
+
+- Alternate Stage: `rejected` / `closed` (फेटाळले / बंद)
+  * If the grievance is sub-judice, duplicate, or out of jurisdiction, an official
+    justification is recorded and communicated to the citizen.
+
+
+================================================================================
+3. COMPLETE DATABASE SCHEMA SPECIFICATION (MySQL / PostgreSQL / Prisma)
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 RAW SQL TABLE DEFINITIONS (MySQL / MariaDB):
+--------------------------------------------------------------------------------
+
+-- 1. Departments Table (26 Government Offices in Kopargaon)
+CREATE TABLE IF NOT EXISTS `citizen_departments` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(255) NOT NULL,
+  `code` VARCHAR(100) NOT NULL UNIQUE,
+  `description` TEXT NULL,
+  `icon` VARCHAR(100) DEFAULT 'Building2',
+  `department_type` VARCHAR(100) DEFAULT 'general_governance',
+  `responsible_office_name` VARCHAR(255) NULL,
+  `office_address` VARCHAR(255) NULL,
+  `contact_number` VARCHAR(50) NULL,
+  `official_contact` VARCHAR(50) NULL,
+  `official_portal_url` VARCHAR(255) NULL,
+  `emergency_contact` VARCHAR(50) NULL,
+  `display_order` INT NOT NULL DEFAULT 1,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_cd_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2. Nodal Officers Directory Table
+CREATE TABLE IF NOT EXISTS `citizen_officers` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `department_id` INT UNSIGNED NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `designation` VARCHAR(255) NOT NULL,
+  `contact_number` VARCHAR(50) NOT NULL,
+  `email` VARCHAR(255) NULL,
+  `office_location` VARCHAR(255) NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`department_id`) REFERENCES `citizen_departments`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3. Citizen Submissions Master Table
+CREATE TABLE IF NOT EXISTS `citizen_submissions` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `reference_number` VARCHAR(100) NOT NULL UNIQUE,
+  `candidate_id` VARCHAR(100) NOT NULL DEFAULT 'sachin-malik',
+  `user_id` BIGINT UNSIGNED NULL,
+  `citizen_name` VARCHAR(255) NOT NULL,
+  `citizen_mobile` VARCHAR(20) NOT NULL,
+  `citizen_email` VARCHAR(255) NULL,
+  `department_id` INT UNSIGNED NOT NULL,
+  `service_id` INT UNSIGNED NULL,
+  `submission_type` ENUM('complaint', 'application', 'query', 'representation') NOT NULL DEFAULT 'complaint',
+  `subject` VARCHAR(255) NOT NULL,
+  `description` TEXT NOT NULL,
+  `village` VARCHAR(150) NOT NULL DEFAULT 'कोपरगाव',
+  `taluka` VARCHAR(100) NOT NULL DEFAULT 'कोपरगाव',
+  `district` VARCHAR(100) NOT NULL DEFAULT 'अहिल्यानगर (अहमदनगर)',
+  `address` TEXT NULL,
+  `location_details` VARCHAR(255) NULL,
+  `reference_application_number` VARCHAR(100) NULL,
+  `status` ENUM('received', 'under_review', 'assigned', 'in_progress', 'resolved', 'closed', 'rejected') NOT NULL DEFAULT 'received',
+  `priority` ENUM('normal', 'high', 'urgent') NOT NULL DEFAULT 'normal',
+  `is_sensitive` TINYINT(1) NOT NULL DEFAULT 0,
+  `assigned_officer_id` INT UNSIGNED NULL,
+  `assigned_admin_id` BIGINT UNSIGNED NULL,
+  `first_update_due_at` DATETIME NOT NULL,
+  `first_update_sent_at` DATETIME NULL,
+  `last_update_sent_at` DATETIME NULL,
+  `sla_status` ENUM('pending', 'met', 'breached') NOT NULL DEFAULT 'pending',
+  `internal_remarks` TEXT NULL,
+  `citizen_visible_remarks` TEXT NULL,
+  `resolution_summary` TEXT NULL,
+  `device_token` VARCHAR(500) NULL,
+  `source` VARCHAR(50) NOT NULL DEFAULT 'mobile_app',
+  `resolved_at` DATETIME NULL,
+  `closed_at` DATETIME NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_cs_ref` (`reference_number`),
+  INDEX `idx_cs_mobile` (`citizen_mobile`),
+  INDEX `idx_cs_status` (`status`),
+  INDEX `idx_cs_dept` (`department_id`),
+  INDEX `idx_cs_sla` (`sla_status`, `first_update_due_at`),
+  FOREIGN KEY (`department_id`) REFERENCES `citizen_departments`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4. Grievance Timeline Actions Table (Citizen-Visible Progress Log)
+CREATE TABLE IF NOT EXISTS `citizen_submission_actions` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `submission_id` BIGINT UNSIGNED NOT NULL,
+  `previous_status` VARCHAR(50) NULL,
+  `new_status` VARCHAR(50) NOT NULL,
+  `action_type` VARCHAR(100) NOT NULL DEFAULT 'status_update',
+  `title` VARCHAR(255) NOT NULL,
+  `description` TEXT NOT NULL,
+  `performed_by_name` VARCHAR(255) NOT NULL DEFAULT 'कार्यालय प्रशासक',
+  `performed_by_role` VARCHAR(100) NOT NULL DEFAULT 'admin',
+  `is_citizen_visible` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_csa_submission` (`submission_id`),
+  FOREIGN KEY (`submission_id`) REFERENCES `citizen_submissions`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5. Citizen Follow-Ups Table (Two-Way Messaging)
+CREATE TABLE IF NOT EXISTS `citizen_submission_followups` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `submission_id` BIGINT UNSIGNED NOT NULL,
+  `sender_type` ENUM('citizen', 'admin') NOT NULL DEFAULT 'citizen',
+  `message` TEXT NOT NULL,
+  `is_read_by_admin` TINYINT(1) NOT NULL DEFAULT 0,
+  `is_read_by_citizen` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`submission_id`) REFERENCES `citizen_submissions`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6. Attachments Table (Photos, PDF Documents)
+CREATE TABLE IF NOT EXISTS `citizen_submission_attachments` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `submission_id` BIGINT UNSIGNED NOT NULL,
+  `file_url` VARCHAR(500) NOT NULL,
+  `file_name` VARCHAR(255) NOT NULL,
+  `file_type` VARCHAR(50) DEFAULT 'image',
+  `file_size` INT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`submission_id`) REFERENCES `citizen_submissions`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+--------------------------------------------------------------------------------
+3.2 PRISMA ORM SCHEMA DEFINITION (`schema.prisma`):
+--------------------------------------------------------------------------------
+enum SubmissionStatus {
+  received
+  under_review
+  assigned
+  in_progress
+  resolved
+  closed
+  rejected
+}
+
+enum SlaStatus {
+  pending
+  met
+  breached
+}
+
+enum PriorityLevel {
+  normal
+  high
+  urgent
+}
+
+model CitizenDepartment {
+  id                    Int                @id @default(autoincrement())
+  name                  String             @db.VarChar(255)
+  code                  String             @unique @db.VarChar(100)
+  description           String?            @db.Text
+  icon                  String?            @default("Building2") @db.VarChar(100)
+  departmentType        String             @default("general_governance") @map("department_type") @db.VarChar(100)
+  responsibleOfficeName String?            @map("responsible_office_name") @db.VarChar(255)
+  officeAddress         String?            @map("office_address") @db.VarChar(255)
+  contactNumber         String?            @map("contact_number") @db.VarChar(50)
+  officialPortalUrl     String?            @map("official_portal_url") @db.VarChar(255)
+  displayOrder          Int                @default(1) @map("display_order")
+  isActive              Boolean            @default(true) @map("is_active")
+  officers              CitizenOfficer[]
+  submissions           CitizenSubmission[]
+
+  @@map("citizen_departments")
+}
+
+model CitizenOfficer {
+  id             Int               @id @default(autoincrement())
+  departmentId   Int               @map("department_id")
+  name           String            @db.VarChar(255)
+  designation    String            @db.VarChar(255)
+  contactNumber  String            @map("contact_number") @db.VarChar(50)
+  email          String?           @db.VarChar(255)
+  isActive       Boolean           @default(true) @map("is_active")
+  department     CitizenDepartment @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  submissions    CitizenSubmission[]
+
+  @@map("citizen_officers")
+}
+
+model CitizenSubmission {
+  id                    BigInt                       @id @default(autoincrement())
+  referenceNumber       String                       @unique @map("reference_number") @db.VarChar(100)
+  candidateId           String                       @default("sachin-malik") @map("candidate_id") @db.VarChar(100)
+  userId                BigInt?                      @map("user_id")
+  citizenName           String                       @map("citizen_name") @db.VarChar(255)
+  citizenMobile         String                       @map("citizen_mobile") @db.VarChar(20)
+  citizenEmail          String?                      @map("citizen_email") @db.VarChar(255)
+  departmentId          Int                          @map("department_id")
+  serviceId             Int?                         @map("service_id")
+  submissionType        String                       @default("complaint") @map("submission_type") @db.VarChar(50)
+  subject               String                       @db.VarChar(255)
+  description           String                       @db.Text
+  village               String                       @default("कोपरगाव") @db.VarChar(150)
+  taluka                String                       @default("कोपरगाव") @db.VarChar(100)
+  district              String                       @default("अहिल्यानगर (अहमदनगर)") @db.VarChar(100)
+  status                SubmissionStatus             @default(received)
+  priority              PriorityLevel                @default(normal)
+  isSensitive           Boolean                      @default(false) @map("is_sensitive")
+  assignedOfficerId     Int?                         @map("assigned_officer_id")
+  firstUpdateDueAt      DateTime                     @map("first_update_due_at")
+  firstUpdateSentAt     DateTime?                    @map("first_update_sent_at")
+  slaStatus             SlaStatus                    @default(pending) @map("sla_status")
+  internalRemarks       String?                      @map("internal_remarks") @db.Text
+  citizenVisibleRemarks String?                      @map("citizen_visible_remarks") @db.Text
+  resolutionSummary     String?                      @map("resolution_summary") @db.Text
+  deviceToken           String?                      @map("device_token") @db.VarChar(500)
+  source                String                       @default("mobile_app") @db.VarChar(50)
+  resolvedAt            DateTime?                    @map("resolved_at")
+  createdAt             DateTime                     @default(now()) @map("created_at")
+  updatedAt             DateTime                     @updatedAt @map("updated_at")
+
+  department            CitizenDepartment            @relation(fields: [departmentId], references: [id])
+  assignedOfficer       CitizenOfficer?              @relation(fields: [assignedOfficerId], references: [id])
+  actions               CitizenSubmissionAction[]
+  followups             CitizenSubmissionFollowup[]
+
+  @@index([referenceNumber])
+  @@index([citizenMobile])
+  @@index([status])
+  @@index([departmentId])
+  @@map("citizen_submissions")
+}
+
+model CitizenSubmissionAction {
+  id               BigInt            @id @default(autoincrement())
+  submissionId     BigInt            @map("submission_id")
+  previousStatus   String?           @map("previous_status") @db.VarChar(50)
+  newStatus        String            @map("new_status") @db.VarChar(50)
+  actionType       String            @default("status_update") @map("action_type") @db.VarChar(100)
+  title            String            @db.VarChar(255)
+  description      String            @db.Text
+  performedByName  String            @default("कार्यालय प्रशासक") @map("performed_by_name") @db.VarChar(255)
+  isCitizenVisible Boolean           @default(true) @map("is_citizen_visible")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  submission       CitizenSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@map("citizen_submission_actions")
+}
+
+model CitizenSubmissionFollowup {
+  id           BigInt            @id @default(autoincrement())
+  submissionId BigInt            @map("submission_id")
+  senderType   String            @default("citizen") @map("sender_type") @db.VarChar(20)
+  message      String            @db.Text
+  createdAt    DateTime          @default(now()) @map("created_at")
+  submission   CitizenSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("citizen_submission_followups")
+}
+
+
+================================================================================
+4. COMPLETE REST API ENDPOINTS CONTRACT (REQUEST & RESPONSE JSON)
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 GET /api/v1/admin/citizen-services/submissions (PROTECTED - Admin Pipeline List)
+--------------------------------------------------------------------------------
+Description: Fetches paginated grievances and service applications with filters.
+Query Parameters:
+  - `status`: 'all' | 'received' | 'under_review' | 'assigned' | 'in_progress' | 'resolved' | 'rejected'
+  - `department_id`: number (filter by specific department)
+  - `sla_status`: 'all' | 'pending' | 'met' | 'breached'
+  - `priority`: 'all' | 'normal' | 'high' | 'urgent'
+  - `search`: string (search by reference_number, citizen_name, mobile, or subject)
+  - `page`: number (default: 1)
+  - `limit`: number (default: 20)
+
+Success Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 3,
+        "reference_number": "CSK-2026-000003",
+        "citizen_name": "चाचणी नागरिक",
+        "citizen_mobile": "9876543210",
+        "department_id": 1,
+        "department": { "id": 1, "name": "तहसील कार्यालय (महसूल विभाग)", "code": "tehsil-office" },
+        "submission_type": "complaint",
+        "subject": "पाणी पुरवठा तक्रार",
+        "description": "कोपरगाव शहरात पाणी पुरवठा सुरळीत नाही.",
+        "village": "कोपरगाव",
+        "status": "received",
+        "priority": "urgent",
+        "first_update_due_at": "2026-11-25T06:31:27.000Z",
+        "sla_status": "pending",
+        "sla_hours_remaining": 18,
+        "assignedOfficer": null,
+        "created_at": "2026-11-24T06:31:27.000Z"
+      }
+    ],
+    "pagination": { "total": 45, "page": 1, "limit": 20, "totalPages": 3 },
+    "kpiMetrics": {
+      "total": 45,
+      "received": 12,
+      "underReview": 5,
+      "assigned": 8,
+      "inProgress": 10,
+      "resolved": 10,
+      "slaBreachedCount": 2,
+      "slaAdherenceRate": "95.5%"
+    }
+  }
+}
+
+--------------------------------------------------------------------------------
+4.2 GET /api/v1/admin/citizen-services/submissions/:id (PROTECTED - Full Detail)
+--------------------------------------------------------------------------------
+Description: Returns full grievance detail with audit actions timeline and follow-ups.
+
+Success Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "submission": {
+      "id": 3,
+      "reference_number": "CSK-2026-000003",
+      "citizen_name": "चाचणी नागरिक",
+      "citizen_mobile": "9876543210",
+      "department": { "id": 1, "name": "तहसील कार्यालय (महसूल विभाग)" },
+      "subject": "पाणी पुरवठा तक्रार",
+      "description": "कोपरगाव शहरात पाणी पुरवठा सुरळीत नाही.",
+      "village": "कोपरगाव",
+      "status": "assigned",
+      "sla_status": "met",
+      "assignedOfficer": {
+        "id": 1,
+        "name": "श्री. गणेश विठ्ठल शिंदे",
+        "designation": "तहसीलदार",
+        "contact_number": "9822012345"
+      },
+      "actions": [
+        {
+          "id": 1,
+          "title": "तक्रार नोंदवली गेली",
+          "description": "नागरिकाने मोबाईल ॲपद्वारे तक्रार नोंदवली. २४-तास SLA सुरू झाला.",
+          "performed_by_name": "प्रणाली",
+          "created_at": "2026-11-24T06:31:27.000Z"
+        },
+        {
+          "id": 2,
+          "title": "अधिकारी नेमणूक",
+          "description": "तक्रार तहसीलदार श्री. गणेश विठ्ठल शिंदे यांच्याकडे वर्ग करण्यात आली.",
+          "performed_by_name": "सचिन मलिक कार्यालय",
+          "created_at": "2026-11-24T07:15:00.000Z"
+        }
+      ],
+      "followups": []
+    }
+  }
+}
+
+--------------------------------------------------------------------------------
+4.3 POST /api/v1/admin/citizen-services/submissions/:id/assign (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Assigns the grievance to a department and nodal officer.
+Request Body:
+{
+  "department_id": 1,
+  "assigned_officer_id": 1,
+  "priority": "high",           // optional ('normal', 'high', 'urgent')
+  "remarks": "तातडीने प्रत्यक्ष जागेची पाहणी करावी." // optional
+}
+
+Success Response (200 OK):
+{
+  "success": true,
+  "message": "तक्रार संबंधित अधिकाऱ्याकडे यशस्वीरीत्या वर्ग करण्यात आली."
+}
+
+--------------------------------------------------------------------------------
+4.4 POST /api/v1/admin/citizen-services/submissions/:id/sla-update (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Sends the mandatory 24-hour first progress update to citizen.
+Request Body:
+{
+  "remarks": "आपल्या अर्जाची संबंधित अधिकाऱ्यांशी चर्चा झाली असून प्रत्यक्ष जागेची पाहणी उद्या दुपारी २ वाजता केली जाईल."
+}
+
+Success Response (200 OK):
+{
+  "success": true,
+  "message": "२४-तास प्रथम प्रगती अद्यतन नागरिकाला पाठवले गेले आणि SLA पूर्ण झाला."
+}
+
+--------------------------------------------------------------------------------
+4.5 POST /api/v1/admin/citizen-services/submissions/:id/action (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Logs a progress step to the citizen-visible timeline.
+Request Body:
+{
+  "title": "जागेची प्रत्यक्ष पाहणी पूर्ण",
+  "description": "तहसीलदार व नगरपरिषद अभियंत्यांनी प्रत्यक्ष पाहणी करून पाईपलाईन दुरुस्तीचे आदेश दिले.",
+  "status_after": "in_progress", // optional status change
+  "is_citizen_visible": true
+}
+
+Success Response (201 Created):
+{
+  "success": true,
+  "message": "टाईमलाईन कृती यशस्वीरीत्या नोंदवली गेली."
+}
+
+--------------------------------------------------------------------------------
+4.6 POST /api/v1/admin/citizen-services/submissions/:id/resolve (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Resolves and closes the grievance with final resolution report.
+Request Body:
+{
+  "resolution_summary": "पाईपलाईन दुरुस्तीचे काम पूर्ण झाले असून शहरात पाणी पुरवठा सुरळीत सुरू करण्यात आला आहे.",
+  "send_whatsapp": true,
+  "send_push": true
+}
+
+Success Response (200 OK):
+{
+  "success": true,
+  "message": "तक्रार यशस्वीरीत्या निकाली काढली गेली व नागरिकाला संदेश पाठवला गेला."
+}
+
+--------------------------------------------------------------------------------
+4.7 POST /api/v1/admin/citizen-services/submissions/:id/reject (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Closes/rejects an invalid grievance with official justification.
+Request Body:
+{
+  "reason": "सदर तक्रार न्यायालयाच्या न्यायप्रविष्ट विषयात असल्याने शासकीय स्तरावरून कारवाई करता येत नाही."
+}
+
+
+================================================================================
+5. COMPLETE BACKEND CODE (Node.js / Express.js / TypeScript)
+================================================================================
+
+File: `src/controllers/citizenGrievanceAdmin.controller.ts`
+
+```typescript
+import { Request, Response } from 'express';
+import { db } from '../config/database'; // mysql2/promise connection pool
+
+export class CitizenGrievanceAdminController {
+  /**
+   * Admin: List all citizen submissions with SLA status & filters
+   * GET /api/v1/admin/citizen-services/submissions
+   */
+  static async getSubmissions(req: Request, res: Response) {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const offset = (page - 1) * limit;
+      const status = req.query.status as string;
+      const deptId = req.query.department_id as string;
+      const slaStatus = req.query.sla_status as string;
+      const priority = req.query.priority as string;
+      const search = (req.query.search as string || '').trim();
+
+      let whereClauses: string[] = ['s.candidate_id = ?'];
+      let queryParams: any[] = ['sachin-malik'];
+
+      if (status && status !== 'all') {
+        whereClauses.push('s.status = ?');
+        queryParams.push(status);
+      }
+
+      if (deptId && deptId !== 'all') {
+        whereClauses.push('s.department_id = ?');
+        queryParams.push(deptId);
+      }
+
+      if (slaStatus && slaStatus !== 'all') {
+        whereClauses.push('s.sla_status = ?');
+        queryParams.push(slaStatus);
+      }
+
+      if (priority && priority !== 'all') {
+        whereClauses.push('s.priority = ?');
+        queryParams.push(priority);
+      }
+
+      if (search) {
+        whereClauses.push('(s.reference_number LIKE ? OR s.citizen_name LIKE ? OR s.citizen_mobile LIKE ? OR s.subject LIKE ? OR s.village LIKE ?)');
+        const searchLike = `%${search}%`;
+        queryParams.push(searchLike, searchLike, searchLike, searchLike, searchLike);
+      }
+
+      const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
+
+      // 1. Count Total
+      const [countResult]: any = await db.query(
+        `SELECT COUNT(*) as total FROM citizen_submissions s ${whereSql}`,
+        queryParams
+      );
+      const total = countResult[0]?.total || 0;
+
+      // 2. Query Rows with Department and Officer Joined
+      const [rows]: any = await db.query(
+        `SELECT s.id, s.reference_number, s.citizen_name, s.citizen_mobile, s.citizen_email,
+                s.department_id, s.service_id, s.submission_type, s.subject, s.description,
+                s.village, s.taluka, s.district, s.status, s.priority, s.is_sensitive,
+                s.first_update_due_at, s.first_update_sent_at, s.sla_status,
+                s.internal_remarks, s.citizen_visible_remarks, s.resolution_summary,
+                s.created_at, s.updated_at,
+                d.name as department_name, d.code as department_code, d.icon as department_icon,
+                o.id as officer_id, o.name as officer_name, o.designation as officer_designation, o.contact_number as officer_contact
+         FROM citizen_submissions s
+         LEFT JOIN citizen_departments d ON s.department_id = d.id
+         LEFT JOIN citizen_officers o ON s.assigned_officer_id = o.id
+         ${whereSql}
+         ORDER BY s.created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...queryParams, limit, offset]
+      );
+
+      // 3. Format items
+      const items = rows.map((r: any) => ({
+        id: r.id,
+        reference_number: r.reference_number,
+        citizen_name: r.citizen_name,
+        citizen_mobile: r.citizen_mobile,
+        citizen_email: r.citizen_email,
+        department_id: r.department_id,
+        department: {
+          id: r.department_id,
+          name: r.department_name,
+          code: r.department_code,
+          icon: r.department_icon,
+        },
+        submission_type: r.submission_type,
+        subject: r.subject,
+        description: r.description,
+        village: r.village,
+        taluka: r.taluka,
+        district: r.district,
+        status: r.status,
+        priority: r.priority,
+        is_sensitive: Boolean(r.is_sensitive),
+        first_update_due_at: r.first_update_due_at,
+        first_update_sent_at: r.first_update_sent_at,
+        sla_status: r.sla_status,
+        internal_remarks: r.internal_remarks,
+        citizen_visible_remarks: r.citizen_visible_remarks,
+        assignedOfficer: r.officer_id ? {
+          id: r.officer_id,
+          name: r.officer_name,
+          designation: r.officer_designation,
+          contact_number: r.officer_contact,
+        } : null,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      }));
+
+      // 4. Calculate KPI Dashboard Metrics
+      const [kpiRows]: any = await db.query(
+        `SELECT 
+           COUNT(*) as total,
+           SUM(status = 'received') as received,
+           SUM(status = 'under_review') as underReview,
+           SUM(status = 'assigned') as assigned,
+           SUM(status = 'in_progress') as inProgress,
+           SUM(status = 'resolved') as resolved,
+           SUM(status = 'rejected') as rejected,
+           SUM(sla_status = 'breached') as slaBreachedCount,
+           SUM(sla_status = 'met') as slaMetCount
+         FROM citizen_submissions
+         WHERE candidate_id = 'sachin-malik'`
+      );
+      const kpi = kpiRows[0] || {};
+      const totalSla = (kpi.slaMetCount || 0) + (kpi.slaBreachedCount || 0);
+      const slaRate = totalSla > 0 ? `${((kpi.slaMetCount / totalSla) * 100).toFixed(1)}%` : '100%';
+
+      return res.json({
+        success: true,
+        data: {
+          items,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
+          kpiMetrics: {
+            total: kpi.total || 0,
+            received: kpi.received || 0,
+            underReview: kpi.underReview || 0,
+            assigned: kpi.assigned || 0,
+            inProgress: kpi.inProgress || 0,
+            resolved: kpi.resolved || 0,
+            rejected: kpi.rejected || 0,
+            slaBreachedCount: kpi.slaBreachedCount || 0,
+            slaAdherenceRate: slaRate,
+          },
+        },
+      });
+    } catch (error: any) {
+      console.error('[CitizenGrievanceAdminController] getSubmissions error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Assign Officer & Department to Submission
+   * POST /api/v1/admin/citizen-services/submissions/:id/assign
+   */
+  static async assignOfficer(req: Request, res: Response) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const { id } = req.params;
+      const { department_id, assigned_officer_id, priority = 'normal', remarks } = req.body;
+
+      if (!department_id || !assigned_officer_id) {
+        return res.status(400).json({ success: false, message: 'विभाग आणि अधिकारी दोन्ही निवडणे आवश्यक आहे.' });
+      }
+
+      // 1. Get Officer details
+      const [officerRows]: any = await connection.query(
+        `SELECT name, designation FROM citizen_officers WHERE id = ?`,
+        [assigned_officer_id]
+      );
+      const officer = officerRows[0];
+      const officerTitle = officer ? `${officer.name} (${officer.designation})` : 'नोडल अधिकारी';
+
+      // 2. Update Submission
+      await connection.query(
+        `UPDATE citizen_submissions 
+         SET department_id = ?, assigned_officer_id = ?, priority = ?, status = 'assigned',
+             internal_remarks = COALESCE(?, internal_remarks), updated_at = NOW()
+         WHERE id = ?`,
+        [department_id, assigned_officer_id, priority, remarks || null, id]
+      );
+
+      // 3. Log Timeline Action
+      await connection.query(
+        `INSERT INTO citizen_submission_actions 
+         (submission_id, previous_status, new_status, action_type, title, description, performed_by_name)
+         VALUES (?, 'received', 'assigned', 'officer_assigned', 'अधिकारी नेमणूक पूर्ण', ?, 'कार्यालय प्रशासक')`,
+        [id, `तक्रार संबंधित अधिकारी ${officerTitle} यांच्याकडे पुढील कार्यवाहीसाठी वर्ग केली आहे.`]
+      );
+
+      await connection.commit();
+      return res.json({ success: true, message: 'तक्रार संबंधित अधिकाऱ्याकडे यशस्वीरीत्या वर्ग झाली.' });
+    } catch (error: any) {
+      await connection.rollback();
+      console.error('[assignOfficer error]:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Admin: Send 24-Hour SLA First Progress Update
+   * POST /api/v1/admin/citizen-services/submissions/:id/sla-update
+   */
+  static async sendSlaUpdate(req: Request, res: Response) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const { id } = req.params;
+      const { remarks } = req.body;
+
+      if (!remarks || !remarks.trim()) {
+        return res.status(400).json({ success: false, message: 'प्रगती अद्यतन मजकूर (Remarks) लिहिणे आवश्यक आहे.' });
+      }
+
+      const now = new Date();
+
+      // 1. Update SLA Status to Met and record timestamp
+      await connection.query(
+        `UPDATE citizen_submissions 
+         SET citizen_visible_remarks = ?, first_update_sent_at = ?, last_update_sent_at = ?,
+             sla_status = 'met', status = CASE WHEN status = 'received' THEN 'under_review' ELSE status END,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [remarks.trim(), now, now, id]
+      );
+
+      // 2. Log to Timeline
+      await connection.query(
+        `INSERT INTO citizen_submission_actions 
+         (submission_id, new_status, action_type, title, description, performed_by_name)
+         VALUES (?, 'under_review', 'sla_update', '२४-तास प्रथम प्रगती अद्यतन', ?, 'मा. श्री. सचिन मलिक कार्यालय')`,
+        [id, remarks.trim()]
+      );
+
+      await connection.commit();
+      return res.json({ success: true, message: '२४-तास प्रथम प्रगती अद्यतन नागरिकाला पाठवले गेले.' });
+    } catch (error: any) {
+      await connection.rollback();
+      return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Admin: Add Timeline Action Step
+   * POST /api/v1/admin/citizen-services/submissions/:id/action
+   */
+  static async addAction(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { title, description, status_after, is_citizen_visible = true } = req.body;
+
+      if (!title || !description) {
+        return res.status(400).json({ success: false, message: 'कृतीचे शीर्षक आणि वर्णन आवश्यक आहे.' });
+      }
+
+      await db.query(
+        `INSERT INTO citizen_submission_actions 
+         (submission_id, new_status, action_type, title, description, performed_by_name, is_citizen_visible)
+         VALUES (?, ?, 'progress_action', ?, ?, 'कार्यालय प्रशासक', ?)`,
+        [id, status_after || 'in_progress', title.trim(), description.trim(), is_citizen_visible ? 1 : 0]
+      );
+
+      if (status_after) {
+        await db.query(`UPDATE citizen_submissions SET status = ?, updated_at = NOW() WHERE id = ?`, [status_after, id]);
+      }
+
+      return res.status(201).json({ success: true, message: 'टाईमलाईन कृती यशस्वीरीत्या नोंदवली गेली.' });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Mark Resolved
+   * POST /api/v1/admin/citizen-services/submissions/:id/resolve
+   */
+  static async resolveGrievance(req: Request, res: Response) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const { id } = req.params;
+      const { resolution_summary } = req.body;
+
+      if (!resolution_summary || !resolution_summary.trim()) {
+        return res.status(400).json({ success: false, message: 'निराकरण अहवाल (Resolution Summary) लिहिणे आवश्यक आहे.' });
+      }
+
+      const now = new Date();
+      await connection.query(
+        `UPDATE citizen_submissions 
+         SET status = 'resolved', resolution_summary = ?, resolved_at = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [resolution_summary.trim(), now, id]
+      );
+
+      await connection.query(
+        `INSERT INTO citizen_submission_actions 
+         (submission_id, new_status, action_type, title, description, performed_by_name)
+         VALUES (?, 'resolved', 'resolved', 'तक्रार यशस्वीरित्या निकाली काढली', ?, 'मा. श्री. सचिन मलिक कार्यालय')`,
+        [id, resolution_summary.trim()]
+      );
+
+      await connection.commit();
+      return res.json({ success: true, message: 'तक्रार यशस्वीरीत्या निकाली काढली गेली.' });
+    } catch (error: any) {
+      await connection.rollback();
+      return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Admin: Reject Grievance
+   * POST /api/v1/admin/citizen-services/submissions/:id/reject
+   */
+  static async rejectGrievance(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ success: false, message: 'फेटाळण्याचे कारण (Reason) नमूद करणे आवश्यक आहे.' });
+      }
+
+      await db.query(
+        `UPDATE citizen_submissions 
+         SET status = 'rejected', internal_remarks = ?, closed_at = NOW(), updated_at = NOW()
+         WHERE id = ?`,
+        [reason.trim(), id]
+      );
+
+      await db.query(
+        `INSERT INTO citizen_submission_actions 
+         (submission_id, new_status, action_type, title, description, performed_by_name)
+         VALUES (?, 'rejected', 'rejected', 'तक्रार फेटाळली / बंद केली', ?, 'कार्यालय प्रशासक')`,
+        [id, `कारण: ${reason.trim()}`]
+      );
+
+      return res.json({ success: true, message: 'तक्रार फेटाळण्यात आली व नागरिकाला सूचित केले.' });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Get Officers List for Dropdown
+   * GET /api/v1/admin/citizen-services/officers
+   */
+  static async getOfficers(req: Request, res: Response) {
+    try {
+      const deptId = req.query.department_id as string;
+      let query = `SELECT id, department_id, name, designation, contact_number FROM citizen_officers WHERE is_active = 1`;
+      const params: any[] = [];
+      if (deptId) {
+        query += ` AND department_id = ?`;
+        params.push(deptId);
+      }
+      query += ` ORDER BY name ASC`;
+      const [rows]: any = await db.query(query, params);
+      return res.json({ success: true, data: rows });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+}
+```
+
+File: `src/routes/citizenGrievanceAdmin.routes.ts`
+
+```typescript
+import { Router } from 'express';
+import { CitizenGrievanceAdminController } from '../controllers/citizenGrievanceAdmin.controller';
+import { requireAdminAuth } from '../middleware/auth.middleware';
+
+const router = Router();
+
+// Protected Web Admin Panel Routes
+router.get('/admin/citizen-services/submissions', requireAdminAuth, CitizenGrievanceAdminController.getSubmissions);
+router.post('/admin/citizen-services/submissions/:id/assign', requireAdminAuth, CitizenGrievanceAdminController.assignOfficer);
+router.post('/admin/citizen-services/submissions/:id/sla-update', requireAdminAuth, CitizenGrievanceAdminController.sendSlaUpdate);
+router.post('/admin/citizen-services/submissions/:id/action', requireAdminAuth, CitizenGrievanceAdminController.addAction);
+router.post('/admin/citizen-services/submissions/:id/resolve', requireAdminAuth, CitizenGrievanceAdminController.resolveGrievance);
+router.post('/admin/citizen-services/submissions/:id/reject', requireAdminAuth, CitizenGrievanceAdminController.rejectGrievance);
+router.get('/admin/citizen-services/officers', requireAdminAuth, CitizenGrievanceAdminController.getOfficers);
+
+export default router;
+```
+
+
+================================================================================
+6. LARAVEL / PHP CONTROLLER CODE (Alternative Backend Option)
+================================================================================
+
+File: `app/Http/Controllers/Api/CitizenGrievanceAdminController.php`
+
+```php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\CitizenSubmission;
+use App\Models\CitizenSubmissionAction;
+use App\Models\CitizenOfficer;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+
+class CitizenGrievanceAdminController extends Controller
+{
+    // GET /api/v1/admin/citizen-services/submissions
+    public function index(Request $request)
+    {
+        $query = CitizenSubmission::with(['department', 'assignedOfficer']);
+
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('department_id') && $request->department_id !== 'all') {
+            $query->where('department_id', $request->department_id);
+        }
+        if ($request->filled('sla_status') && $request->sla_status !== 'all') {
+            $query->where('sla_status', $request->sla_status);
+        }
+        if ($request->filled('search')) {
+            $s = '%' . $request->search . '%';
+            $query->where(function ($q) use ($s) {
+                $q->where('reference_number', 'like', $s)
+                  ->orWhere('citizen_name', 'like', $s)
+                  ->orWhere('citizen_mobile', 'like', $s)
+                  ->orWhere('subject', 'like', $s)
+                  ->orWhere('village', 'like', $s);
+            });
+        }
+
+        $submissions = $query->orderBy('created_at', 'desc')->paginate($request->input('limit', 20));
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'items' => $submissions->items(),
+                'pagination' => [
+                    'total' => $submissions->total(),
+                    'page' => $submissions->currentPage(),
+                    'limit' => $submissions->perPage(),
+                    'totalPages' => $submissions->lastPage(),
+                ],
+                'kpiMetrics' => [
+                    'total' => CitizenSubmission::count(),
+                    'received' => CitizenSubmission::where('status', 'received')->count(),
+                    'assigned' => CitizenSubmission::where('status', 'assigned')->count(),
+                    'inProgress' => CitizenSubmission::where('status', 'in_progress')->count(),
+                    'resolved' => CitizenSubmission::where('status', 'resolved')->count(),
+                    'slaBreachedCount' => CitizenSubmission::where('sla_status', 'breached')->count(),
+                ]
+            ]
+        ]);
+    }
+
+    // POST /api/v1/admin/citizen-services/submissions/{id}/assign
+    public function assign(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'department_id'       => 'required|integer',
+            'assigned_officer_id' => 'required|integer',
+            'priority'            => 'nullable|string',
+        ]);
+
+        DB::transaction(function () use ($id, $validated, $request) {
+            $submission = CitizenSubmission::findOrFail($id);
+            $submission->update([
+                'department_id'       => $validated['department_id'],
+                'assigned_officer_id' => $validated['assigned_officer_id'],
+                'priority'            => $validated['priority'] ?? 'normal',
+                'status'              => 'assigned',
+            ]);
+
+            $officer = CitizenOfficer::find($validated['assigned_officer_id']);
+            $officerName = $officer ? "{$officer->name} ({$officer->designation})" : "नोडल अधिकारी";
+
+            CitizenSubmissionAction::create([
+                'submission_id'     => $id,
+                'previous_status'   => 'received',
+                'new_status'        => 'assigned',
+                'action_type'       => 'officer_assigned',
+                'title'             => 'अधिकारी नेमणूक पूर्ण',
+                'description'       => "तक्रार संबंधित अधिकारी {$officerName} यांच्याकडे वर्ग करण्यात आली.",
+                'performed_by_name' => 'कार्यालय प्रशासक',
+            ]);
+        });
+
+        return response()->json(['success' => true, 'message' => 'अधिकारी यशस्वीरीत्या नेमला गेला.']);
+    }
+
+    // POST /api/v1/admin/citizen-services/submissions/{id}/sla-update
+    public function slaUpdate(Request $request, $id)
+    {
+        $validated = $request->validate(['remarks' => 'required|string']);
+
+        DB::transaction(function () use ($id, $validated) {
+            $submission = CitizenSubmission::findOrFail($id);
+            $submission->update([
+                'citizen_visible_remarks' => $validated['remarks'],
+                'first_update_sent_at'    => Carbon::now(),
+                'last_update_sent_at'     => Carbon::now(),
+                'sla_status'              => 'met',
+            ]);
+
+            CitizenSubmissionAction::create([
+                'submission_id'     => $id,
+                'new_status'        => $submission->status,
+                'action_type'       => 'sla_update',
+                'title'             => '२४-तास प्रथम प्रगती अद्यतन',
+                'description'       => $validated['remarks'],
+                'performed_by_name' => 'मा. श्री. सचिन मलिक कार्यालय',
+            ]);
+        });
+
+        return response()->json(['success' => true, 'message' => '२४-तास SLA अद्यतन यशस्वीरीत्या नोंदवले.']);
+    }
+}
+```
+
+
+================================================================================
+7. PRODUCTION WEB ADMIN PANEL UI COMPONENT (React.js / Next.js / Tailwind CSS)
+================================================================================
+
+File: `src/components/admin/CitizenGrievancesPipelineManager.tsx`
+
+```tsx
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+interface Department {
+  id: number;
+  name: string;
+}
+
+interface Officer {
+  id: number;
+  department_id: number;
+  name: string;
+  designation: string;
+  contact_number: string;
+}
+
+interface SubmissionAction {
+  id: number;
+  title: string;
+  description: string;
+  performed_by_name: string;
+  created_at: string;
+}
+
+interface Grievance {
+  id: number;
+  reference_number: string;
+  citizen_name: string;
+  citizen_mobile: string;
+  department: { id: number; name: string };
+  submission_type: string;
+  subject: string;
+  description: string;
+  village: string;
+  status: 'received' | 'under_review' | 'assigned' | 'in_progress' | 'resolved' | 'rejected';
+  priority: 'normal' | 'high' | 'urgent';
+  first_update_due_at: string;
+  sla_status: 'pending' | 'met' | 'breached';
+  assignedOfficer?: { id: number; name: string; designation: string; contact_number: string } | null;
+  created_at: string;
+  actions?: SubmissionAction[];
+}
+
+export default function CitizenGrievancesPipelineManager() {
+  const [items, setItems] = useState<Grievance[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [officers, setOfficers] = useState<Officer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [selectedGrievance, setSelectedGrievance] = useState<Grievance | null>(null);
+
+  // Modals
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [slaModalOpen, setSlaModalOpen] = useState(false);
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+
+  // Modal Inputs
+  const [selectedOfficerId, setSelectedOfficerId] = useState<number | ''>('');
+  const [slaRemarks, setSlaRemarks] = useState('');
+  const [actionTitle, setActionTitle] = useState('');
+  const [actionDesc, setActionDesc] = useState('');
+  const [resolutionSummary, setResolutionSummary] = useState('');
+
+  const fetchSubmissions = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get('https://backend.misachinmalik.in/api/v1/admin/citizen-services/submissions', {
+        params: { status: statusFilter, search },
+        headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` },
+      });
+      if (res.data?.success) {
+        setItems(res.data.data.items || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDependencies = async () => {
+    try {
+      const [deptRes, offRes] = await Promise.all([
+        axios.get('https://backend.misachinmalik.in/api/v1/citizen-services/departments'),
+        axios.get('https://backend.misachinmalik.in/api/v1/admin/citizen-services/officers', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` },
+        }),
+      ]);
+      if (deptRes.data?.success) setDepartments(deptRes.data.data || []);
+      if (offRes.data?.success) setOfficers(offRes.data.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubmissions();
+    fetchDependencies();
+  }, [statusFilter]);
+
+  // SLA Time Remaining calculation
+  const getSlaBadge = (dueAt: string, slaStatus: string) => {
+    if (slaStatus === 'met') {
+      return <span className="text-xs px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 font-bold">✅ २४-तास SLA पूर्ण</span>;
+    }
+    const diffHours = Math.round((new Date(dueAt).getTime() - new Date().getTime()) / (1000 * 60 * 60));
+    if (diffHours <= 0) {
+      return <span className="text-xs px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-black animate-pulse">⚠️ SLA Breached</span>;
+    }
+    return <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">⏳ {diffHours} तास शिल्लक</span>;
+  };
+
+  // Submit Handlers
+  const handleAssign = async () => {
+    if (!selectedGrievance || !selectedOfficerId) return;
+    try {
+      await axios.post(
+        `https://backend.misachinmalik.in/api/v1/admin/citizen-services/submissions/${selectedGrievance.id}/assign`,
+        {
+          department_id: selectedGrievance.department.id,
+          assigned_officer_id: Number(selectedOfficerId),
+          priority: 'high',
+        },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+      );
+      alert('अधिकारी यशस्वीरीत्या नेमला.');
+      setAssignModalOpen(false);
+      fetchSubmissions();
+    } catch (e) {
+      alert('Error assigning officer');
+    }
+  };
+
+  const handleSlaUpdate = async () => {
+    if (!selectedGrievance || !slaRemarks.trim()) return;
+    try {
+      await axios.post(
+        `https://backend.misachinmalik.in/api/v1/admin/citizen-services/submissions/${selectedGrievance.id}/sla-update`,
+        { remarks: slaRemarks.trim() },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+      );
+      alert('२४-तास प्रथम प्रगती अद्यतन नागरिकाला पाठवले.');
+      setSlaModalOpen(false);
+      setSlaRemarks('');
+      fetchSubmissions();
+    } catch (e) {
+      alert('Error updating SLA');
+    }
+  };
+
+  const handleResolve = async () => {
+    if (!selectedGrievance || !resolutionSummary.trim()) return;
+    try {
+      await axios.post(
+        `https://backend.misachinmalik.in/api/v1/admin/citizen-services/submissions/${selectedGrievance.id}/resolve`,
+        { resolution_summary: resolutionSummary.trim() },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+      );
+      alert('तक्रार निकाली काढली गेली.');
+      setResolveModalOpen(false);
+      setResolutionSummary('');
+      fetchSubmissions();
+    } catch (e) {
+      alert('Error resolving grievance');
+    }
+  };
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-black text-gray-900">
+            नागरिक सेवा व तक्रार निवारण पाईपलाईन (Grievance Redressal Pipeline)
+          </h1>
+          <p className="text-sm text-gray-500">
+            २६ शासकीय विभागांशी संबंधित तक्रारी, २४-तास SLA व्यवस्थापन व अधिकारी कार्यप्रणाली
+          </p>
+        </div>
+        <button
+          onClick={fetchSubmissions}
+          className="px-4 py-2 bg-white border border-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-100 shadow-sm"
+        >
+          🔄 रिफ्रेश करा
+        </button>
+      </div>
+
+      {/* Status Filter Tabs */}
+      <div className="flex gap-2 overflow-x-auto mb-6 bg-white p-3 rounded-2xl border shadow-sm">
+        {[
+          { id: 'all', label: 'सर्व तक्रारी' },
+          { id: 'received', label: '📥 नवीन प्राप्त' },
+          { id: 'assigned', label: '👤 अधिकारी नेमलेले' },
+          { id: 'in_progress', label: '⚙️ काम चालू' },
+          { id: 'resolved', label: '✅ निकाली' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setStatusFilter(tab.id)}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+              statusFilter === tab.id ? 'bg-orange-600 text-white shadow' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Grievances Table / Pipeline Cards */}
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <table className="w-full text-left text-sm text-gray-700">
+          <thead className="bg-gray-100 text-xs font-bold text-gray-600 uppercase border-b">
+            <tr>
+              <th className="p-3">संदर्भ क्र. (Ref)</th>
+              <th className="p-3">नागरिकाचे नाव व मोबाईल</th>
+              <th className="p-3">विभाग (Department)</th>
+              <th className="p-3">तक्रार / विषय</th>
+              <th className="p-3">२४-तास SLA स्थिती</th>
+              <th className="p-3">नेमलेला अधिकारी</th>
+              <th className="p-3 text-right">कृती (Pipeline Actions)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {loading ? (
+              <tr><td colSpan={7} className="p-8 text-center text-gray-500 font-semibold">तक्रारी लोड होत आहेत...</td></tr>
+            ) : items.length === 0 ? (
+              <tr><td colSpan={7} className="p-8 text-center text-gray-400">कोणतीही तक्रार आढळली नाही.</td></tr>
+            ) : (
+              items.map((g) => (
+                <tr key={g.id} className="hover:bg-gray-50 transition">
+                  <td className="p-3 font-mono font-bold text-orange-600">{g.reference_number}</td>
+                  <td className="p-3">
+                    <p className="font-bold text-gray-900">{g.citizen_name}</p>
+                    <p className="text-xs text-gray-500 font-mono">📞 {g.citizen_mobile} (📍 {g.village})</p>
+                  </td>
+                  <td className="p-3">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                      {g.department.name}
+                    </span>
+                  </td>
+                  <td className="p-3 max-w-xs truncate font-medium" title={g.description}>
+                    {g.subject}
+                  </td>
+                  <td className="p-3 whitespace-nowrap">
+                    {getSlaBadge(g.first_update_due_at, g.sla_status)}
+                  </td>
+                  <td className="p-3 text-xs">
+                    {g.assignedOfficer ? (
+                      <div>
+                        <p className="font-bold text-gray-900">{g.assignedOfficer.name}</p>
+                        <p className="text-gray-500">{g.assignedOfficer.designation}</p>
+                      </div>
+                    ) : (
+                      <span className="text-red-500 font-bold italic">अधिकारी नेमलेला नाही</span>
+                    )}
+                  </td>
+                  <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
+                    {!g.assignedOfficer && (
+                      <button
+                        onClick={() => { setSelectedGrievance(g); setAssignModalOpen(true); }}
+                        className="px-2.5 py-1 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700"
+                      >
+                        अधिकारी नेमा
+                      </button>
+                    )}
+                    {g.sla_status !== 'met' && (
+                      <button
+                        onClick={() => { setSelectedGrievance(g); setSlaModalOpen(true); }}
+                        className="px-2.5 py-1 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600"
+                      >
+                        SLA अद्यतन
+                      </button>
+                    )}
+                    {g.status !== 'resolved' && (
+                      <button
+                        onClick={() => { setSelectedGrievance(g); setResolveModalOpen(true); }}
+                        className="px-2.5 py-1 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700"
+                      >
+                        निकाली काढा
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal: Assign Officer */}
+      {assignModalOpen && selectedGrievance && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-black text-gray-900 mb-1">अधिकारी नेमणूक</h3>
+            <p className="text-xs text-gray-500 mb-4">तक्रार: {selectedGrievance.reference_number} ({selectedGrievance.department.name})</p>
+            <div className="mb-4">
+              <label className="text-xs font-bold text-gray-700 block mb-1">संबंधित अधिकारी निवडा:</label>
+              <select
+                value={selectedOfficerId}
+                onChange={(e) => setSelectedOfficerId(Number(e.target.value))}
+                className="w-full p-2.5 border rounded-xl text-sm"
+              >
+                <option value="">-- अधिकारी निवडा --</option>
+                {officers.map((off) => (
+                  <option key={off.id} value={off.id}>
+                    {off.name} - {off.designation} ({off.contact_number})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setAssignModalOpen(false)} className="px-4 py-2 text-sm text-gray-600 font-semibold">रद्द करा</button>
+              <button onClick={handleAssign} className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700">नेमणूक करा</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: 24-Hour SLA Update */}
+      {slaModalOpen && selectedGrievance && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-black text-gray-900 mb-1">२४-तास प्रथम प्रगती अद्यतन</h3>
+            <p className="text-xs text-gray-500 mb-4">नागरिकाला थेट मोबाईल ॲपवर प्रगती संदेश पाठवला जाईल.</p>
+            <textarea
+              rows={4}
+              value={slaRemarks}
+              onChange={(e) => setSlaRemarks(e.target.value)}
+              placeholder="आपल्या अर्जाची संबंधित अधिकाऱ्यांशी चर्चा झाली असून प्रत्यक्ष जागेची पाहणी उद्या केली जाईल..."
+              className="w-full p-3 border rounded-xl text-sm mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setSlaModalOpen(false)} className="px-4 py-2 text-sm text-gray-600 font-semibold">रद्द करा</button>
+              <button onClick={handleSlaUpdate} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-xl hover:bg-amber-700">अद्यतन पाठवा</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Mark Resolved */}
+      {resolveModalOpen && selectedGrievance && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-black text-gray-900 mb-1">तक्रार निकाली काढा</h3>
+            <p className="text-xs text-gray-500 mb-4">नागरिकाची तक्रार पूर्णपणे सोडवल्याचा अहवाल नोंदवा.</p>
+            <textarea
+              rows={4}
+              value={resolutionSummary}
+              onChange={(e) => setResolutionSummary(e.target.value)}
+              placeholder="सदर ठिकाणी नवीन पाईपलाईन टाकून पाणी पुरवठा सुरळीत सुरू केला आहे..."
+              className="w-full p-3 border rounded-xl text-sm mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setResolveModalOpen(false)} className="px-4 py-2 text-sm text-gray-600 font-semibold">रद्द करा</button>
+              <button onClick={handleResolve} className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-xl hover:bg-green-700">निकाली नोंदवा</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+
+================================================================================
+8. DATABASE SEED SCRIPT (All 26 Government Departments & Nodal Officers)
+================================================================================
+
+Run this SQL to populate the 26 departments and primary officers in Kopargaon:
+
+```sql
+INSERT INTO `citizen_departments` 
+  (`id`, `name`, `code`, `icon`, `responsible_office_name`, `contact_number`, `display_order`)
+VALUES
+  (1, 'तहसील कार्यालय (महसूल विभाग)', 'tehsil-office', 'Building2', 'तहसीलदार कार्यालय, कोपरगाव', '०२४२३-२२२२३३', 1),
+  (2, 'पंचायत समिती (ग्रामीण विकास)', 'panchayat-samiti', 'Landmark', 'गटविकास अधिकारी कार्यालय', '०२४२३-२२२३४४', 2),
+  (3, 'कोपरगाव नगरपरिषद (नागरी प्रशासन)', 'municipal-council', 'Building', 'मुख्याधिकारी कार्यालय, नगरपरिषद', '०२४२३-२२२४५५', 3),
+  (4, 'सार्वजनिक बांधकाम विभाग (PWD)', 'pwd', 'Hammer', 'उपअभियंता कार्यालय, PWD', '०२४२३-२२२५६६', 4),
+  (5, 'महावितरण (MSEDCL - वीज वितरण)', 'msedcl', 'Zap', 'कार्यकारी अभियंता, महावितरण', '१९१२', 5),
+  (6, 'ग्रामीण पाणी पुरवठा विभाग (Z.P.)', 'rural-water-supply', 'Droplets', 'उपअभियंता, पाणी पुरवठा उपविभाग', '०२४२३-२२२६७७', 6),
+  (7, 'तालुका कृषी कार्यालय (कृषी विभाग)', 'agriculture-office', 'Sprout', 'तालुका कृषी अधिकारी कार्यालय', '०२४२३-२२२७८८', 7),
+  (8, 'तालुका आरोग्य विभाग व ग्रामीण रुग्णालय', 'health-department', 'HeartPulse', 'वैद्यकीय अधीक्षक, ग्रामीण रुग्णालय', '०२४२३-२२२८९९', 8),
+  (9, 'पोलीस प्रशासन (कोपरगाव शहर व ग्रामीण)', 'police-administration', 'ShieldAlert', 'पोलीस निरीक्षक कार्यालय', '११२ / ०२४२३-२२२१००', 9),
+  (10, 'तालुका शिक्षण विभाग (प्राथमिक व माध्यमिक)', 'education-office', 'GraduationCap', 'गटशिक्षणाधिकारी कार्यालय', '०२४२३-२२२१११', 10),
+  (11, 'गोदावरी कालवे व जलसंपदा उपविभाग', 'irrigation-canals', 'Waves', 'कार्यकारी अभियंता, गोदावरी कालवे', '०२४२३-२२२१२२', 11),
+  (12, 'पशुसंवर्धन विभाग (पशुवैद्यकीय दवाखाने)', 'animal-husbandry', 'PawPrint', 'पशुधन विकास अधिकारी कार्यालय', '०२४२३-२२२१३३', 12),
+  (13, 'सहाय्यक निबंधक सहकारी संस्था (सहकार)', 'cooperative-societies', 'Users', 'सहाय्यक निबंधक कार्यालय', '०२४२३-२२२१४४', 13),
+  (14, 'भूमी अभिलेख कार्यालय (जमीन मोजणी)', 'land-records', 'Compass', 'उपअधीक्षक भूमी अभिलेख', '०२४२३-२२२१५५', 14),
+  (15, 'एकात्मिक बालविकास सेवा (अंगणवाडी)', 'child-development', 'Baby', 'बालविकास प्रकल्प अधिकारी (CDPO)', '०२४२३-२२२१६६', 15),
+  (16, 'वन विभाग (Forest Department)', 'forest-department', 'TreePine', 'वनपरिक्षेत्र अधिकारी कार्यालय', '०२४२३-२२२१७७', 16),
+  (17, 'राज्य उत्पादन शुल्क (State Excise)', 'state-excise', 'Wine', 'निरीक्षक, राज्य उत्पादन शुल्क', '०२४२३-२२२१८८', 17),
+  (18, 'उपप्रादेशिक परिवहन कार्यालय (RTO)', 'rto-transport', 'Car', 'उपप्रादेशिक परिवहन कार्यालय', '०२४२३-२२२१९९', 18),
+  (19, 'सामाजिक न्याय व विशेष सहाय्य विभाग', 'social-welfare', 'Scale', 'समाजकल्याण अधिकारी कार्यालय', '०२४२३-२२२२००', 19),
+  (20, 'कौशल्य विकास, रोजगार व उद्योजकता', 'skill-employment', 'Briefcase', 'कौशल्य विकास मार्गदर्शन केंद्र', '०२४२३-२२२२११', 20),
+  (21, 'अन्न व नागरी पुरवठा (राशन व्यवस्था)', 'food-civil-supplies', 'Wheat', 'तहसील पुरवठा अधिकारी कार्यालय', '०२४२३-२२२२२२', 21),
+  (22, 'जिल्हा उद्योग केंद्र (DIC / उद्योग)', 'district-industries', 'Factory', 'उद्योग अधिकारी कक्ष, कोपरगाव', '०२४२३-२२२२३३', 22),
+  (23, 'नोंदणी व मुद्रांक विभाग (दुय्यम निबंधक)', 'sub-registrar', 'FileSignature', 'दुय्यम निबंधक कार्यालय, कोपरगाव', '०२४२३-२२२२४४', 23),
+  (24, 'आपत्ती व्यवस्थापन व अग्निशामक दल', 'fire-disaster', 'Flame', 'नगरपरिषद अग्निशामक केंद्र', '१०१ / ०२४२३-२२२२५५', 24),
+  (25, 'महाराष्ट्र राज्य मार्ग परिवहन (MSRTC)', 'msrtc-bus', 'Bus', 'आगार व्यवस्थापक, कोपरगाव आगार', '०२४२३-२२२२६६', 25),
+  (26, 'टपाल विभाग (India Post)', 'india-post', 'Mail', 'उपविभागीय टपाल कार्यालय, कोपरगाव', '०२४२३-२२२२७७', 26)
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `responsible_office_name` = VALUES(`responsible_office_name`);
+
+INSERT INTO `citizen_officers` 
+  (`id`, `department_id`, `name`, `designation`, `contact_number`, `email`)
+VALUES
+  (1, 1, 'श्री. गणेश विठ्ठल शिंदे', 'तहसीलदार', '9822012345', 'tehsildar.kopargaon@maharashtra.gov.in'),
+  (2, 2, 'श्री. सचिन सूर्यवंशी', 'गटविकास अधिकारी (BDO)', '9822023456', 'bdo.kopargaon@maharashtra.gov.in'),
+  (3, 3, 'श्री. शांताराम गोसावी', 'मुख्याधिकारी, नगरपरिषद', '9822034567', 'co.kopargaon@maharashtra.gov.in'),
+  (4, 4, 'इंजि. विलास पाटील', 'उपअभियंता, PWD', '9822045678', 'pwd.kopargaon@maharashtra.gov.in'),
+  (5, 5, 'इंजि. राहुल कुलकर्णी', 'कार्यकारी अभियंता, MSEDCL', '9822056789', 'msedcl.kopargaon@mahadiscom.in')
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `designation` = VALUES(`designation`);
+```
+
+
+================================================================================
+9. VERIFICATION CURL COMMANDS & TROUBLESHOOTING GUIDE
+================================================================================
+
+1. TEST CITIZEN GRIEVANCE SUBMISSION (FROM MOBILE APP):
+curl -s -X POST "https://backend.misachinmalik.in/api/v1/citizen-services/submissions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "department_id": 1,
+    "citizen_name": "संतोष बाळू जाधव",
+    "citizen_mobile": "9822123456",
+    "village": "कोपरगाव",
+    "subject": "उत्पन्न दाखला मिळण्यास विलंब",
+    "description": "मी ३ दिवसांपूर्वी उत्पन्नाच्या दाखल्यासाठी अर्ज केला होता, परंतु अजून मिळालेला नाही."
+  }'
+
+Expected HTTP 200/201:
+{"success":true,"message":"आपली तक्रार / अर्ज यशस्वीरीत्या नोंदविण्यात आला आहे.","data":{"id":1,"reference_number":"CSK-2026-000001",...}}
+
+
+2. TEST ADMIN FETCH SUBMISSIONS (FOR ADMIN PANEL PIPELINE):
+curl -s -X GET "https://backend.misachinmalik.in/api/v1/admin/citizen-services/submissions?status=all" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN"
+
+Expected HTTP 200 OK:
+{"success":true,"data":{"items":[{"id":1,"reference_number":"CSK-2026-000001",...}],"pagination":{...},"kpiMetrics":{...}}}
+
+
+3. TEST ASSIGNING OFFICER (PIPELINE STAGE 3):
+curl -s -X POST "https://backend.misachinmalik.in/api/v1/admin/citizen-services/submissions/1/assign" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "department_id": 1,
+    "assigned_officer_id": 1,
+    "priority": "high"
+  }'
+
+Expected HTTP 200 OK:
+{"success":true,"message":"तक्रार संबंधित अधिकाऱ्याकडे यशस्वीरीत्या वर्ग झाली."}
+
+
+4. TEST 24-HOUR SLA FIRST UPDATE (PIPELINE STAGE 4):
+curl -s -X POST "https://backend.misachinmalik.in/api/v1/admin/citizen-services/submissions/1/sla-update" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "remarks": "आपल्या अर्जाची छाननी पूर्ण झाली असून अहवाल प्राप्त झाला आहे. उद्या दाखला मिळेल."
+  }'
+
+Expected HTTP 200 OK:
+{"success":true,"message":"२४-तास प्रथम प्रगती अद्यतन नागरिकाला पाठवले गेले."}
+
+
+5. TEST CITIZEN STATUS TRACKING (FROM MOBILE APP TRACKING SCREEN):
+curl -s -X GET "https://backend.misachinmalik.in/api/v1/citizen-services/submissions/CSK-2026-000001"
+
+Expected HTTP 200 OK:
+Returns the submission with `sla_status: "met"`, `assignedOfficer`, and updated timeline actions!
+
+================================================================================
+END OF CITIZEN SERVICES & GRIEVANCES REDRESSAL PIPELINE GUIDE
+================================================================================

@@ -22,6 +22,7 @@ import { Department } from "../types/citizenServices.types";
 import { citizenServicesApi } from "../services/citizenServicesApi";
 import { issuesApi, IssueCategory } from "../services/issuesApi";
 import { authApi } from "../services/authApi";
+import { getCachedPushTokens } from "../services/notificationPushService";
 
 function mapDepartmentToIssueCategory(deptName: string): IssueCategory {
   const s = (deptName || "").toLowerCase();
@@ -102,9 +103,17 @@ export default function NewCitizenSubmissionScreen() {
       Alert.alert("विभाग निवडा", "कृपया संबंधित शासकीय विभाग निवडा.");
       return;
     }
+    if (!citizenName.trim()) {
+      Alert.alert("नाव आवश्यक", "कृपया आपले पूर्ण नाव प्रविष्ट करा.");
+      return;
+    }
     const cleanMobile = citizenMobile.trim().replace(/\D/g, "");
     if (cleanMobile.length !== 10) {
       Alert.alert("अवैध मोबाईल", "कृपया १० अंकी वैध मोबाईल नंबर प्रविष्ट करा.");
+      return;
+    }
+    if (!village.trim()) {
+      Alert.alert("गाव/शहर आवश्यक", "कृपया गावाचे किंवा प्रभागाचे नाव लिहा.");
       return;
     }
     if (!subject.trim()) {
@@ -122,16 +131,21 @@ export default function NewCitizenSubmissionScreen() {
       const deptObj = departments.find((d) => d.id === selectedDeptId);
       const deptName = deptObj ? deptObj.name : "शासकीय विभाग";
 
+      // Attach push notification device tokens for real-time tracking updates
+      const cachedTokens = await getCachedPushTokens();
+      const deviceToken = cachedTokens?.fcmToken || cachedTokens?.expoToken || undefined;
+
       // 1. Primary Submission: Citizen Services 26-Department Grievance System
       const res = await citizenServicesApi.createSubmission({
         department_id: selectedDeptId,
         service_id: params.serviceId ? Number(params.serviceId) : undefined,
         submission_type: submissionType,
-        citizen_name: citizenName.trim() || "नागरिक",
+        citizen_name: citizenName.trim(),
         citizen_mobile: cleanMobile,
-        village: village.trim() || "कोपरगाव",
+        village: village.trim(),
         subject: subject.trim(),
         description: description.trim(),
+        device_token: deviceToken,
       });
 
       const refNo = res?.data?.reference_number || `CSK-2026-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -143,12 +157,14 @@ export default function NewCitizenSubmissionScreen() {
           title: `[${deptName}] ${subject.trim()}`,
           description: `${description.trim()}\n\n🏛️ संबंधित विभाग: ${deptName}\n📍 गाव/वार्ड: ${village.trim()}\n📋 संदर्भ क्रमांक: ${refNo}\n📌 प्रकार: ${submissionType === "complaint" ? "तक्रार निवारण" : "सेवा अर्ज"}`,
           category: mapDepartmentToIssueCategory(deptName),
-          location: village.trim() || "कोपरगाव",
-          ward: village.trim() || "कोपरगाव",
-          userName: citizenName.trim() || "नागरिक",
+          location: village.trim(),
+          ward: village.trim(),
+          userName: citizenName.trim(),
           userMobile: cleanMobile,
           userId: currentUser?.id ? String(currentUser.id) : undefined,
           userEmail: currentUser?.email,
+          fcmToken: cachedTokens?.fcmToken || undefined,
+          expoToken: cachedTokens?.expoToken || undefined,
         });
         issueSyncSuccess = true;
       } catch (syncErr) {
