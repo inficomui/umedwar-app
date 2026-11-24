@@ -20,6 +20,7 @@ export interface CreateInquiryInput {
   userId?: string | number;
   fcmToken?: string;
   expoToken?: string;
+  source?: string;
 }
 
 export interface InquiryItem {
@@ -68,7 +69,7 @@ class InquiryApiService {
         expoToken: expoToken || null,
         expo_token: expoToken || null,
         status: "pending",
-        source: "mobile_app",
+        source: input.source || "mobile_app",
       };
 
       const headers = {

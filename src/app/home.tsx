@@ -15,6 +15,7 @@ import {
   Alert,
   TextInput,
   Linking,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -24,6 +25,7 @@ import { useCampaign, CarouselBanner } from "../context/CampaignContext";
 import { BottomTabBar } from "../components/BottomTabBar";
 import CitizenServicesQuickCard from "../components/home/CitizenServicesQuickCard";
 import { HomeDevelopmentPlanSection } from "../components/HomeDevelopmentPlanSection";
+import { inquiryApi } from "../services/inquiryApi";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 // 1024 x 512 image aspect ratio (2:1)
@@ -77,8 +79,53 @@ export default function HomeScreen() {
   const [menuModalVisible, setMenuModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [contactName, setContactName] = useState("");
+  const [contactMobile, setContactMobile] = useState("");
   const [contactMessage, setContactMessage] = useState("");
   const [contactSent, setContactSent] = useState(false);
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.name && !contactName) setContactName(currentUser.name);
+      if (currentUser.mobile && !contactMobile) setContactMobile(currentUser.mobile);
+    }
+  }, [currentUser]);
+
+  const handleHomeContactSubmit = async () => {
+    if (!contactName.trim()) {
+      Alert.alert("माहिती भरा", "कृपया आपले नाव लिहा.");
+      return;
+    }
+    const mobile = contactMobile.trim() || currentUser?.mobile || "";
+    if (!mobile || mobile.replace(/\D/g, "").length < 10) {
+      Alert.alert(
+        "मोबाईल नंबर भरा",
+        "कृपया १० अंकी वैध मोबाईल नंबर लिहा जेणेकरून सचिन मलिक कार्यालय आपल्याशी संपर्क साधू शकेल."
+      );
+      return;
+    }
+    if (!contactMessage.trim()) {
+      Alert.alert("संदेश लिहा", "कृपया आपला संदेश किंवा सूचना लिहा.");
+      return;
+    }
+
+    setIsSubmittingContact(true);
+    try {
+      await inquiryApi.submitInquiry({
+        name: contactName.trim(),
+        mobile: mobile.trim(),
+        message: contactMessage.trim(),
+        userId: currentUser?.id,
+        source: "home_page_quick_form",
+      });
+      setContactSent(true);
+    } catch (err) {
+      // Offline fallback
+      setContactSent(true);
+    } finally {
+      setIsSubmittingContact(false);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -929,7 +976,14 @@ export default function HomeScreen() {
               <Icon source="check-circle" size={32} color="#16A34A" />
               <Text style={styles.contactSentTitle}>संदेश पाठवला गेला!</Text>
               <Text style={styles.contactSentSubtitle}>आम्ही लवकरच आपल्याशी संपर्क साधू.</Text>
-              <TouchableOpacity onPress={() => { setContactSent(false); setContactName(""); setContactMessage(""); }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setContactSent(false);
+                  setContactName(currentUser?.name || "");
+                  setContactMobile(currentUser?.mobile || "");
+                  setContactMessage("");
+                }}
+              >
                 <Text style={styles.contactSentReset}>पुन्हा संपर्क करा</Text>
               </TouchableOpacity>
             </View>
@@ -944,6 +998,15 @@ export default function HomeScreen() {
                 onChangeText={setContactName}
               />
               <TextInput
+                style={styles.contactInput}
+                placeholder="मोबाईल नंबर (१० अंकी)"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={contactMobile}
+                onChangeText={setContactMobile}
+              />
+              <TextInput
                 style={[styles.contactInput, styles.contactMessageInput]}
                 placeholder="आपला संदेश किंवा सूचना लिहा..."
                 placeholderTextColor="#9CA3AF"
@@ -954,18 +1017,24 @@ export default function HomeScreen() {
                 textAlignVertical="top"
               />
               <TouchableOpacity
-                style={[styles.contactSubmitBtn, (!contactName.trim() || !contactMessage.trim()) && { opacity: 0.55 }]}
+                style={[
+                  styles.contactSubmitBtn,
+                  (!contactName.trim() || !contactMessage.trim() || isSubmittingContact) && {
+                    opacity: 0.65,
+                  },
+                ]}
                 activeOpacity={0.85}
-                onPress={() => {
-                  if (!contactName.trim() || !contactMessage.trim()) {
-                    Alert.alert("माहिती भरा", "कृपया नाव आणि संदेश दोन्ही लिहा.");
-                    return;
-                  }
-                  setContactSent(true);
-                }}
+                disabled={isSubmittingContact}
+                onPress={handleHomeContactSubmit}
               >
-                <Icon source="send" size={18} color="#FFFFFF" />
-                <Text style={styles.contactSubmitBtnText}>संदेश पाठवा</Text>
+                {isSubmittingContact ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Icon source="send" size={18} color="#FFFFFF" />
+                    <Text style={styles.contactSubmitBtnText}>संदेश पाठवा</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           )}

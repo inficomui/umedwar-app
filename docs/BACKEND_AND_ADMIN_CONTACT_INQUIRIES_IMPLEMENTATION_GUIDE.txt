@@ -1,0 +1,1081 @@
+================================================================================
+CONTACT INQUIRIES & CITIZEN MESSAGES (जनसंपर्क चौकशी व संदेश व्यवस्थापन)
+BACKEND & ADMIN PANEL COMPLETE IMPLEMENTATION GUIDE
+================================================================================
+Project: "मी सचिन मलिक" (Umedwar Mobile App & Web Admin Dashboard)
+Domain: https://backend.misachinmalik.in
+Target Module: "संपर्क चौकशी व संदेश (Contact Inquiries & Citizen Messages)"
+Author: Core Engineering Team
+Date: 24 November 2026
+Format: Technical Implementation Specification (.txt)
+================================================================================
+
+TABLE OF CONTENTS:
+1. ARCHITECTURAL OVERVIEW & MOBILE INTEGRATION CONTEXT
+2. DATABASE SCHEMA SPECIFICATION (MySQL / PostgreSQL / MariaDB / Prisma)
+3. REST API ENDPOINTS CONTRACT
+4. COMPLETE BACKEND CODE (Node.js / Express.js / TypeScript)
+5. LARAVEL / PHP CONTROLLER CODE (Alternative Backend Option)
+6. ADMIN PANEL UI COMPONENT (React.js / Next.js / Tailwind CSS)
+7. MOBILE APP PAYLOAD CONTRACT & INTEGRATION
+8. VERIFICATION CURL COMMANDS & TROUBLESHOOTING
+
+================================================================================
+1. ARCHITECTURAL OVERVIEW & MOBILE INTEGRATION CONTEXT
+================================================================================
+
+The "मी सचिन मलिक" mobile application collects citizen inquiries and contact
+messages from two primary touchpoints:
+1. Home Screen Quick Contact Form: "🙏 संदेश पाठवा" (Name, Mobile, Message)
+2. Dedicated Contact Screen (`/contact`): Full contact inquiry with Name, Mobile,
+   Email, and Detailed Message.
+
+Both touchpoints send their payload to the unified endpoint:
+  POST https://backend.misachinmalik.in/api/v1/inquiries
+
+This guide provides the complete, production-ready backend database tables,
+REST API routes, controllers, and Web Admin Panel dashboard interface to view,
+filter, manage, and reply to these inquiries directly.
+
+================================================================================
+2. DATABASE SCHEMA SPECIFICATION (MySQL / PostgreSQL / MariaDB / Prisma)
+================================================================================
+
+2.1 RAW SQL TABLE CREATION SCRIPT:
+--------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `inquiries` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `candidate_id` VARCHAR(100) NOT NULL DEFAULT 'sachin-malik',
+  `user_id` BIGINT UNSIGNED NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `mobile` VARCHAR(20) NOT NULL,
+  `email` VARCHAR(255) NULL,
+  `subject` VARCHAR(255) NOT NULL DEFAULT 'General Contact Inquiry',
+  `message` TEXT NOT NULL,
+  `source` VARCHAR(50) NOT NULL DEFAULT 'mobile_app',
+  `status` ENUM('pending', 'in_progress', 'replied', 'closed') NOT NULL DEFAULT 'pending',
+  `admin_reply` TEXT NULL,
+  `replied_by` BIGINT UNSIGNED NULL,
+  `replied_at` DATETIME NULL,
+  `fcm_token` VARCHAR(500) NULL,
+  `expo_token` VARCHAR(500) NULL,
+  `ip_address` VARCHAR(45) NULL,
+  `user_agent` VARCHAR(255) NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_inquiries_candidate` (`candidate_id`),
+  INDEX `idx_inquiries_mobile` (`mobile`),
+  INDEX `idx_inquiries_status` (`status`),
+  INDEX `idx_inquiries_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+2.2 PRISMA ORM SCHEMA DEFINITION (`schema.prisma`):
+--------------------------------------------------------------------------------
+enum InquiryStatus {
+  pending
+  in_progress
+  replied
+  closed
+}
+
+model Inquiry {
+  id           BigInt        @id @default(autoincrement())
+  candidateId  String        @default("sachin-malik") @map("candidate_id") @db.VarChar(100)
+  userId       BigInt?       @map("user_id")
+  name         String        @db.VarChar(255)
+  mobile       String        @db.VarChar(20)
+  email        String?       @db.VarChar(255)
+  subject      String        @default("General Contact Inquiry") @db.VarChar(255)
+  message      String        @db.Text
+  source       String        @default("mobile_app") @db.VarChar(50)
+  status       InquiryStatus @default(pending)
+  adminReply   String?       @map("admin_reply") @db.Text
+  repliedBy    BigInt?       @map("replied_by")
+  repliedAt    DateTime?     @map("replied_at")
+  fcmToken     String?       @map("fcm_token") @db.VarChar(500)
+  expoToken    String?       @map("expo_token") @db.VarChar(500)
+  ipAddress    String?       @map("ip_address") @db.VarChar(45)
+  userAgent    String?       @map("user_agent") @db.VarChar(255)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([candidateId])
+  @@index([mobile])
+  @@index([status])
+  @@index([createdAt])
+  @@map("inquiries")
+}
+
+
+================================================================================
+3. REST API ENDPOINTS CONTRACT
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 POST /api/v1/inquiries (PUBLIC - Used by Mobile App)
+--------------------------------------------------------------------------------
+Description: Submits a new contact inquiry from the mobile app.
+Authentication: None (Public with optional Bearer token if user is logged in).
+Request Headers:
+  Content-Type: application/json
+  Accept: application/json
+
+Request Body:
+{
+  "candidateId": "sachin-malik",        // or candidate_id
+  "userId": 12,                         // or user_id (optional)
+  "name": "राम शिंदे",                 // required
+  "mobile": "9876543210",               // required (10 digits)
+  "email": "citizen@example.com",       // optional
+  "subject": "General Contact Inquiry", // optional
+  "message": "पाणी पुरवठा समस्येबाबत...", // required
+  "fcmToken": "...",                    // optional (for push notification reply)
+  "expoToken": "...",                   // optional
+  "source": "home_page_quick_form"      // or 'contact_screen'
+}
+
+Success Response (201 Created):
+{
+  "success": true,
+  "message": "आपला संदेश यशस्वीरीत्या कार्यालयाकडे नोंदवला गेला आहे.",
+  "data": {
+    "id": 142,
+    "name": "राम शिंदे",
+    "mobile": "9876543210",
+    "subject": "General Contact Inquiry",
+    "status": "pending",
+    "createdAt": "2026-11-24T10:45:00.000Z"
+  }
+}
+
+--------------------------------------------------------------------------------
+3.2 GET /api/v1/admin/inquiries (PROTECTED - Used by Admin Panel)
+--------------------------------------------------------------------------------
+Description: Retrieves paginated inquiries with filters for admin dashboard.
+Authentication: Bearer <Admin_JWT_Token>
+Query Parameters:
+  - `page`: number (default: 1)
+  - `limit`: number (default: 20)
+  - `status`: 'pending' | 'in_progress' | 'replied' | 'closed' | 'all'
+  - `search`: string (searches name, mobile, message, or subject)
+  - `source`: 'mobile_app' | 'home_page_quick_form' | 'contact_screen'
+  - `dateFrom`: YYYY-MM-DD
+  - `dateTo`: YYYY-MM-DD
+
+Success Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "inquiries": [
+      {
+        "id": 142,
+        "name": "राम शिंदे",
+        "mobile": "9876543210",
+        "email": "citizen@example.com",
+        "subject": "General Contact Inquiry",
+        "message": "कोपरगाव शहरात शुद्ध पाणी पुरवठा योजना कधी सुरू होणार?",
+        "source": "home_page_quick_form",
+        "status": "pending",
+        "adminReply": null,
+        "repliedAt": null,
+        "createdAt": "2026-11-24T10:45:00.000Z"
+      }
+    ],
+    "pagination": {
+      "total": 54,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 3
+    },
+    "metrics": {
+      "total": 54,
+      "pending": 18,
+      "in_progress": 6,
+      "replied": 25,
+      "closed": 5,
+      "todayCount": 8
+    }
+  }
+}
+
+--------------------------------------------------------------------------------
+3.3 GET /api/v1/admin/inquiries/:id (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Fetches full details of a single inquiry.
+Authentication: Bearer <Admin_JWT_Token>
+
+--------------------------------------------------------------------------------
+3.4 PATCH /api/v1/admin/inquiries/:id/status (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Updates inquiry status without reply.
+Authentication: Bearer <Admin_JWT_Token>
+Request Body:
+{
+  "status": "in_progress" // or 'closed' or 'pending'
+}
+
+--------------------------------------------------------------------------------
+3.5 POST /api/v1/admin/inquiries/:id/reply (PROTECTED)
+--------------------------------------------------------------------------------
+Description: Records admin reply and sends push/WhatsApp notification.
+Authentication: Bearer <Admin_JWT_Token>
+Request Body:
+{
+  "reply": "आपल्या संदेशाची नोंद घेतली असून संबंधित अधिकाऱ्यांशी संपर्क साधला आहे.",
+  "status": "replied",           // optional, default 'replied'
+  "sendPushNotification": true,  // optional, sends FCM/Expo push if token present
+  "sendWhatsApp": false          // optional
+}
+
+
+================================================================================
+4. COMPLETE BACKEND CODE (Node.js / Express.js / TypeScript)
+================================================================================
+
+4.1 INQUIRY CONTROLLER (`src/controllers/inquiry.controller.ts`):
+--------------------------------------------------------------------------------
+import { Request, Response } from 'express';
+import { db } from '../config/database'; // or prisma client
+
+export class InquiryController {
+  /**
+   * Public: Submit inquiry from mobile app (Home page or Contact page)
+   * POST /api/v1/inquiries
+   */
+  static async submitInquiry(req: Request, res: Response) {
+    try {
+      const b = req.body;
+      const candidateId = b.candidateId || b.candidate_id || 'sachin-malik';
+      const userId = b.userId || b.user_id || null;
+      const name = (b.name || '').trim();
+      const mobile = (b.mobile || '').trim();
+      const email = b.email ? b.email.trim() : null;
+      const subject = b.subject ? b.subject.trim() : 'General Contact Inquiry';
+      const message = (b.message || '').trim();
+      const source = b.source || 'mobile_app';
+      const fcmToken = b.fcmToken || b.fcm_token || null;
+      const expoToken = b.expoToken || b.expo_token || null;
+
+      // Validation
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          message: 'नाव भरणे आवश्यक आहे (Name is required).',
+        });
+      }
+
+      if (!mobile || mobile.replace(/\D/g, '').length < 10) {
+        return res.status(400).json({
+          success: false,
+          message: '१० अंकी वैध मोबाईल नंबर आवश्यक आहे (Valid 10-digit mobile number required).',
+        });
+      }
+
+      if (!message) {
+        return res.status(400).json({
+          success: false,
+          message: 'संदेश लिहिणे आवश्यक आहे (Message cannot be empty).',
+        });
+      }
+
+      const ipAddress = req.ip || req.socket.remoteAddress || null;
+      const userAgent = req.headers['user-agent'] || null;
+
+      // SQL Insert
+      const [result]: any = await db.query(
+        `INSERT INTO inquiries 
+         (candidate_id, user_id, name, mobile, email, subject, message, source, status, fcm_token, expo_token, ip_address, user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+        [candidateId, userId, name, mobile, email, subject, message, source, fcmToken, expoToken, ipAddress, userAgent]
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: 'आपला संदेश यशस्वीरीत्या सचिन मलिक कार्यालयाकडे नोंदवला गेला आहे.',
+        data: {
+          id: result.insertId,
+          name,
+          mobile,
+          subject,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        },
+      });
+    } catch (error: any) {
+      console.error('[InquiryController] submitInquiry error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'तांत्रिक त्रुटीमुळे संदेश पाठवता आला नाही. कृपया पुन्हा प्रयत्न करा.',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+
+  /**
+   * Admin: List inquiries with filters and pagination
+   * GET /api/v1/admin/inquiries
+   */
+  static async getAdminInquiries(req: Request, res: Response) {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const offset = (page - 1) * limit;
+      const status = req.query.status as string;
+      const search = (req.query.search as string || '').trim();
+      const source = req.query.source as string;
+
+      let whereClauses: string[] = ['candidate_id = ?'];
+      let queryParams: any[] = ['sachin-malik'];
+
+      if (status && status !== 'all') {
+        whereClauses.push('status = ?');
+        queryParams.push(status);
+      }
+
+      if (source && source !== 'all') {
+        whereClauses.push('source = ?');
+        queryParams.push(source);
+      }
+
+      if (search) {
+        whereClauses.push('(name LIKE ? OR mobile LIKE ? OR message LIKE ? OR subject LIKE ?)');
+        const searchLike = `%${search}%`;
+        queryParams.push(searchLike, searchLike, searchLike, searchLike);
+      }
+
+      const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+      // Count total
+      const [countResult]: any = await db.query(
+        `SELECT COUNT(*) as total FROM inquiries ${whereSql}`,
+        queryParams
+      );
+      const total = countResult[0]?.total || 0;
+
+      // Select paginated records
+      const [rows]: any = await db.query(
+        `SELECT id, candidate_id, user_id, name, mobile, email, subject, message,
+                source, status, admin_reply, replied_by, replied_at, fcm_token, expo_token,
+                created_at, updated_at
+         FROM inquiries
+         ${whereSql}
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...queryParams, limit, offset]
+      );
+
+      // KPI Metrics calculation
+      const [metricsRows]: any = await db.query(
+        `SELECT 
+           COUNT(*) as total,
+           SUM(status = 'pending') as pending,
+           SUM(status = 'in_progress') as in_progress,
+           SUM(status = 'replied') as replied,
+           SUM(status = 'closed') as closed,
+           SUM(DATE(created_at) = CURDATE()) as todayCount
+         FROM inquiries
+         WHERE candidate_id = 'sachin-malik'`
+      );
+      const m = metricsRows[0] || {};
+
+      return res.json({
+        success: true,
+        data: {
+          inquiries: rows,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
+          metrics: {
+            total: m.total || 0,
+            pending: m.pending || 0,
+            in_progress: m.in_progress || 0,
+            replied: m.replied || 0,
+            closed: m.closed || 0,
+            todayCount: m.todayCount || 0,
+          },
+        },
+      });
+    } catch (error: any) {
+      console.error('[InquiryController] getAdminInquiries error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Reply to an inquiry
+   * POST /api/v1/admin/inquiries/:id/reply
+   */
+  static async replyInquiry(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { reply, status = 'replied' } = req.body;
+      const adminUserId = (req as any).user?.id || 1;
+
+      if (!reply || !reply.trim()) {
+        return res.status(400).json({ success: false, message: 'उत्तर (Reply text) लिहिणे आवश्यक आहे.' });
+      }
+
+      const now = new Date();
+      const [updateResult]: any = await db.query(
+        `UPDATE inquiries 
+         SET admin_reply = ?, status = ?, replied_by = ?, replied_at = ?, updated_at = ?
+         WHERE id = ?`,
+        [reply.trim(), status, adminUserId, now, now, id]
+      );
+
+      if (updateResult.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Inquiry not found.' });
+      }
+
+      return res.json({
+        success: true,
+        message: 'उत्तर यशस्वीरीत्या नोंदवले गेले आहे.',
+      });
+    } catch (error: any) {
+      console.error('[InquiryController] replyInquiry error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Update inquiry status
+   * PATCH /api/v1/admin/inquiries/:id/status
+   */
+  static async updateStatus(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!['pending', 'in_progress', 'replied', 'closed'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid status value.' });
+      }
+
+      await db.query(`UPDATE inquiries SET status = ?, updated_at = NOW() WHERE id = ?`, [status, id]);
+
+      return res.json({ success: true, message: 'Status updated successfully.' });
+    } catch (error: any) {
+      console.error('[InquiryController] updateStatus error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+}
+
+4.2 EXPRESS ROUTE WIRING (`src/routes/inquiry.routes.ts`):
+--------------------------------------------------------------------------------
+import { Router } from 'express';
+import { InquiryController } from '../controllers/inquiry.controller';
+import { requireAdminAuth } from '../middleware/auth.middleware'; // Admin JWT guard
+
+const router = Router();
+
+// Public Mobile App Endpoint
+router.post('/inquiries', InquiryController.submitInquiry);
+
+// Protected Admin Endpoints
+router.get('/admin/inquiries', requireAdminAuth, InquiryController.getAdminInquiries);
+router.post('/admin/inquiries/:id/reply', requireAdminAuth, InquiryController.replyInquiry);
+router.patch('/admin/inquiries/:id/status', requireAdminAuth, InquiryController.updateStatus);
+
+export default router;
+
+
+================================================================================
+5. LARAVEL / PHP CONTROLLER CODE (Alternative Backend Option)
+================================================================================
+
+If the backend runs on Laravel / PHP:
+
+// app/Http/Controllers/Api/InquiryController.php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\Inquiry;
+use Carbon\Carbon;
+
+class InquiryController extends Controller
+{
+    // POST /api/v1/inquiries
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name'        => 'required|string|max:255',
+            'mobile'      => 'required|string|min:10|max:15',
+            'message'     => 'required|string',
+            'email'       => 'nullable|email|max:255',
+            'subject'     => 'nullable|string|max:255',
+            'source'      => 'nullable|string|max:50',
+            'fcmToken'    => 'nullable|string',
+            'expoToken'   => 'nullable|string',
+        ]);
+
+        $inquiry = Inquiry::create([
+            'candidate_id' => $request->input('candidateId', 'sachin-malik'),
+            'user_id'      => $request->input('userId', auth('sanctum')->id()),
+            'name'         => $validated['name'],
+            'mobile'       => $validated['mobile'],
+            'email'        => $validated['email'] ?? null,
+            'subject'      => $validated['subject'] ?? 'General Contact Inquiry',
+            'message'      => $validated['message'],
+            'source'       => $validated['source'] ?? 'mobile_app',
+            'status'       => 'pending',
+            'fcm_token'    => $request->input('fcmToken') ?? $request->input('fcm_token'),
+            'expo_token'   => $request->input('expoToken') ?? $request->input('expo_token'),
+            'ip_address'   => $request->ip(),
+            'user_agent'   => $request->userAgent(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'आपला संदेश यशस्वीरीत्या कार्यालयाकडे नोंदवला गेला आहे.',
+            'data'    => $inquiry,
+        ], 201);
+    }
+
+    // GET /api/v1/admin/inquiries
+    public function index(Request $request)
+    {
+        $query = Inquiry::where('candidate_id', 'sachin-malik');
+
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('search')) {
+            $s = '%' . $request->search . '%';
+            $query->where(function ($q) use ($s) {
+                $q->where('name', 'like', $s)
+                  ->orWhere('mobile', 'like', $s)
+                  ->orWhere('message', 'like', $s);
+            });
+        }
+
+        $inquiries = $query->orderBy('created_at', 'desc')->paginate($request->input('limit', 20));
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'inquiries' => $inquiries->items(),
+                'pagination' => [
+                    'total' => $inquiries->total(),
+                    'page' => $inquiries->currentPage(),
+                    'limit' => $inquiries->perPage(),
+                    'totalPages' => $inquiries->lastPage(),
+                ],
+                'metrics' => [
+                    'total' => Inquiry::count(),
+                    'pending' => Inquiry::where('status', 'pending')->count(),
+                    'replied' => Inquiry::where('status', 'replied')->count(),
+                    'todayCount' => Inquiry::whereDate('created_at', Carbon::today())->count(),
+                ]
+            ]
+        ]);
+    }
+}
+
+
+================================================================================
+6. ADMIN PANEL UI COMPONENT (React.js / Next.js / Tailwind CSS)
+================================================================================
+
+Below is the complete, drop-in React component for the Web Admin Panel:
+`src/components/admin/ContactInquiriesManager.tsx`
+
+```tsx
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+interface Inquiry {
+  id: number;
+  name: string;
+  mobile: string;
+  email?: string;
+  subject: string;
+  message: string;
+  source: string;
+  status: 'pending' | 'in_progress' | 'replied' | 'closed';
+  admin_reply?: string;
+  replied_at?: string;
+  created_at: string;
+}
+
+interface Metrics {
+  total: number;
+  pending: number;
+  in_progress: number;
+  replied: number;
+  closed: number;
+  todayCount: number;
+}
+
+export default function ContactInquiriesManager() {
+  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [selectedInquiry, setSelectedInquiry] = useState<Inquiry | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+
+  const fetchInquiries = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get('https://backend.misachinmalik.in/api/v1/admin/inquiries', {
+        params: { page, limit: 15, status: statusFilter, search },
+        headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` },
+      });
+      if (res.data?.success) {
+        setInquiries(res.data.data.inquiries || []);
+        setMetrics(res.data.data.metrics || null);
+        setTotalPages(res.data.data.pagination?.totalPages || 1);
+      }
+    } catch (err) {
+      console.error('Error fetching inquiries:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInquiries();
+  }, [page, statusFilter]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    fetchInquiries();
+  };
+
+  const handleStatusUpdate = async (id: number, newStatus: string) => {
+    try {
+      await axios.patch(
+        `https://backend.misachinmalik.in/api/v1/admin/inquiries/${id}/status`,
+        { status: newStatus },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+      );
+      fetchInquiries();
+      if (selectedInquiry?.id === id) {
+        setSelectedInquiry((prev) => prev ? { ...prev, status: newStatus as any } : null);
+      }
+    } catch (err) {
+      alert('Failed to update status');
+    }
+  };
+
+  const handleSendReply = async () => {
+    if (!selectedInquiry || !replyText.trim()) return;
+    try {
+      setIsSubmittingReply(true);
+      await axios.post(
+        `https://backend.misachinmalik.in/api/v1/admin/inquiries/${selectedInquiry.id}/reply`,
+        { reply: replyText.trim(), status: 'replied' },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+      );
+      alert('उत्तर यशस्वीरीत्या पाठवले गेले.');
+      setReplyText('');
+      setSelectedInquiry(null);
+      fetchInquiries();
+    } catch (err) {
+      alert('Failed to send reply');
+    } finally {
+      setIsSubmittingReply(false);
+    }
+  };
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Top Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            जनसंपर्क चौकशी व संदेश (Contact Inquiries)
+          </h1>
+          <p className="text-sm text-gray-500">
+            मोबाईल ॲपच्या Home Page व Contact Screen वरून आलेले सर्व संदेश व चौकशी
+          </p>
+        </div>
+        <button
+          onClick={fetchInquiries}
+          className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-100 shadow-sm"
+        >
+          🔄 रिफ्रेश करा
+        </button>
+      </div>
+
+      {/* KPI Cards */}
+      {metrics && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <span className="text-xs font-semibold text-gray-500 uppercase">एकूण संदेश</span>
+            <p className="text-2xl font-black text-gray-900 mt-1">{metrics.total}</p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-amber-200 shadow-sm">
+            <span className="text-xs font-semibold text-amber-600 uppercase">प्रलंबित (Pending)</span>
+            <p className="text-2xl font-black text-amber-600 mt-1">{metrics.pending}</p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm">
+            <span className="text-xs font-semibold text-blue-600 uppercase">प्रगतीपथावर (In Progress)</span>
+            <p className="text-2xl font-black text-blue-600 mt-1">{metrics.in_progress}</p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm">
+            <span className="text-xs font-semibold text-green-600 uppercase">उत्तर दिलेले (Replied)</span>
+            <p className="text-2xl font-black text-green-600 mt-1">{metrics.replied}</p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-purple-200 shadow-sm">
+            <span className="text-xs font-semibold text-purple-600 uppercase">आज आलेले संदेश</span>
+            <p className="text-2xl font-black text-purple-600 mt-1">{metrics.todayCount}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Search & Status Filters */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
+        {/* Status Filter Tabs */}
+        <div className="flex gap-2 overflow-x-auto w-full md:w-auto">
+          {[
+            { id: 'all', label: 'सर्व' },
+            { id: 'pending', label: '⏳ प्रलंबित' },
+            { id: 'in_progress', label: '⚙️ चालू' },
+            { id: 'replied', label: '✅ उत्तर दिलेले' },
+            { id: 'closed', label: '🔒 बंद' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => { setStatusFilter(tab.id); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
+                statusFilter === tab.id
+                  ? 'bg-orange-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search Input */}
+        <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-80">
+          <input
+            type="text"
+            placeholder="नाव, मोबाईल, किंवा संदेश शोधा..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-black"
+          >
+            शोधा
+          </button>
+        </form>
+      </div>
+
+      {/* Inquiries Table */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-700">
+            <thead className="bg-gray-100 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase">
+              <tr>
+                <th className="p-3">क्र.</th>
+                <th className="p-3">नागरिकाचे नाव</th>
+                <th className="p-3">मोबाईल नंबर</th>
+                <th className="p-3">संदेश / चौकशी</th>
+                <th className="p-3">मार्ग (Source)</th>
+                <th className="p-3">स्थिती (Status)</th>
+                <th className="p-3">तारीख</th>
+                <th className="p-3 text-right">कृती (Actions)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-gray-500 font-semibold">
+                    माहिती लोड होत आहे...
+                  </td>
+                </tr>
+              ) : inquiries.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-gray-400 font-medium">
+                    कोणतेही संदेश आढळले नाहीत.
+                  </td>
+                </tr>
+              ) : (
+                inquiries.map((item, idx) => (
+                  <tr key={item.id} className="hover:bg-gray-50 transition">
+                    <td className="p-3 font-semibold text-gray-500">{(page - 1) * 15 + idx + 1}</td>
+                    <td className="p-3 font-bold text-gray-900">{item.name}</td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-gray-800">{item.mobile}</span>
+                        <a
+                          href={`tel:${item.mobile}`}
+                          className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100"
+                          title="कॉल करा"
+                        >
+                          📞
+                        </a>
+                        <a
+                          href={`https://wa.me/91${item.mobile.replace(/\D/g, '')}?text=जय%20महाराष्ट्र!%20आपल्या%20संदर्भात%20सचिन%20मलिक%20कार्यालयाकडून...`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded border border-green-200 hover:bg-green-100"
+                          title="WhatsApp उघडा"
+                        >
+                          💬
+                        </a>
+                      </div>
+                    </td>
+                    <td className="p-3 max-w-xs truncate" title={item.message}>
+                      {item.message}
+                    </td>
+                    <td className="p-3">
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium border">
+                        {item.source === 'home_page_quick_form' ? '🏠 Home' : '📱 Contact'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
+                          item.status === 'replied'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : item.status === 'in_progress'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : item.status === 'closed'
+                            ? 'bg-gray-100 text-gray-600 border-gray-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}
+                      >
+                        {item.status === 'replied'
+                          ? '✅ उत्तर दिलेले'
+                          : item.status === 'in_progress'
+                          ? '⚙️ चालू'
+                          : item.status === 'closed'
+                          ? '🔒 बंद'
+                          : '⏳ प्रलंबित'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-xs text-gray-500 whitespace-nowrap">
+                      {new Date(item.created_at).toLocaleDateString('mr-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </td>
+                    <td className="p-3 text-right">
+                      <button
+                        onClick={() => setSelectedInquiry(item)}
+                        className="px-3 py-1 bg-orange-50 text-orange-600 font-semibold text-xs rounded-lg border border-orange-200 hover:bg-orange-100 transition"
+                      >
+                        सविस्तर पहा / उत्तर द्या
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="p-4 border-t border-gray-100 flex justify-between items-center text-sm text-gray-600">
+          <span>पृष्ठ {page} / {totalPages}</span>
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1 bg-gray-100 rounded text-sm disabled:opacity-40"
+            >
+              ← मागील
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="px-3 py-1 bg-gray-100 rounded text-sm disabled:opacity-40"
+            >
+              पुढील →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Inquiry Detail & Reply Modal */}
+      {selectedInquiry && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-black text-gray-900">{selectedInquiry.name}</h3>
+                <p className="text-xs text-gray-500 font-mono mt-0.5">📞 {selectedInquiry.mobile}</p>
+              </div>
+              <button
+                onClick={() => setSelectedInquiry(null)}
+                className="text-gray-400 hover:text-gray-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Citizen Message */}
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4">
+              <span className="text-xs font-bold text-gray-500 uppercase block mb-1">
+                नागरिकाचा संदेश:
+              </span>
+              <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                {selectedInquiry.message}
+              </p>
+            </div>
+
+            {/* Existing Admin Reply if already replied */}
+            {selectedInquiry.admin_reply && (
+              <div className="bg-green-50 p-4 rounded-xl border border-green-200 mb-4">
+                <span className="text-xs font-bold text-green-700 uppercase block mb-1">
+                  दिलेले उत्तर:
+                </span>
+                <p className="text-sm text-green-900 whitespace-pre-wrap">
+                  {selectedInquiry.admin_reply}
+                </p>
+                {selectedInquiry.replied_at && (
+                  <span className="text-[10px] text-green-600 mt-2 block">
+                    उत्तर दिनांक: {new Date(selectedInquiry.replied_at).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Quick Status Changer */}
+            <div className="mb-4">
+              <span className="text-xs font-bold text-gray-500 uppercase block mb-1">
+                स्थिती बदला:
+              </span>
+              <div className="flex gap-2">
+                {['pending', 'in_progress', 'replied', 'closed'].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => handleStatusUpdate(selectedInquiry.id, st)}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${
+                      selectedInquiry.status === st
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Reply Textarea */}
+            <div className="mb-4">
+              <label className="text-xs font-bold text-gray-700 uppercase block mb-1">
+                नागरिकाला उत्तर लिहा:
+              </label>
+              <textarea
+                rows={4}
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="कार्यालयाकडून अधिकृत उत्तर किंवा सूचना..."
+                className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setSelectedInquiry(null)}
+                className="px-4 py-2 border border-gray-300 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-100"
+              >
+                रद्द करा
+              </button>
+              <button
+                disabled={isSubmittingReply || !replyText.trim()}
+                onClick={handleSendReply}
+                className="px-5 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-orange-700 disabled:opacity-50 transition shadow-sm"
+              >
+                {isSubmittingReply ? 'पाठवत आहे...' : 'उत्तर नोंदवा'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+
+================================================================================
+7. MOBILE APP PAYLOAD CONTRACT & INTEGRATION
+================================================================================
+
+The Mobile App sends the following contract payload from both Home Page and
+Contact Screen:
+
+```typescript
+export interface CreateInquiryInput {
+  candidateId: string;       // "sachin-malik"
+  candidate_id?: string;     // backward-compatibility alias
+  userId?: string | number;  // Current authenticated user ID if logged in
+  user_id?: string | number; // alias
+  name: string;              // Citizen's name
+  mobile: string;            // 10-digit mobile number
+  email?: string | null;     // Optional email
+  subject?: string;          // "General Contact Inquiry"
+  message: string;           // Message text
+  fcmToken?: string | null;  // For in-app push notification
+  fcm_token?: string | null;
+  expoToken?: string | null; // For Expo push service
+  expo_token?: string | null;
+  status: 'pending';         // Default status
+  source: 'home_page_quick_form' | 'contact_screen' | 'mobile_app';
+}
+```
+
+
+================================================================================
+8. VERIFICATION CURL COMMANDS & TROUBLESHOOTING
+================================================================================
+
+1. TEST PUBLIC INQUIRY SUBMISSION (From Mobile App):
+curl -s -X POST "https://backend.misachinmalik.in/api/v1/inquiries" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "candidateId": "sachin-malik",
+    "name": "चाचणी नागरिक",
+    "mobile": "9876543210",
+    "email": "test@misachinmalik.in",
+    "subject": "विकास आराखडा चौकशी",
+    "message": "कोपरगाव शहरातील रस्ते दुरुस्तीबाबत माहिती हवी आहे.",
+    "source": "home_page_quick_form"
+  }'
+
+Expected HTTP 201 Response:
+{"success":true,"message":"आपला संदेश यशस्वीरीत्या कार्यालयाकडे नोंदवला गेला आहे.","data":{"id":1,...}}
+
+
+2. TEST ADMIN FETCH INQUIRIES LIST:
+curl -s -X GET "https://backend.misachinmalik.in/api/v1/admin/inquiries?page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \
+  -H "Accept: application/json"
+
+
+3. TEST ADMIN REPLY TO INQUIRY:
+curl -s -X POST "https://backend.misachinmalik.in/api/v1/admin/inquiries/1/reply" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reply": "आपल्या संदेशाची नोंद घेण्यात आली आहे. लवकरच कार्यवाही होईल.",
+    "status": "replied"
+  }'
+
+================================================================================
+END OF IMPLEMENTATION GUIDE
+================================================================================
