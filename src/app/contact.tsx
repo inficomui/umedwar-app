@@ -134,6 +134,7 @@ export default function ContactScreen() {
         email: email.trim() || undefined,
         message: message.trim(),
         userId: currentUser?.id,
+        source: "contact_screen",
       });
 
       if (res.success) {
