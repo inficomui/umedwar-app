@@ -69,6 +69,7 @@ export default function HomeScreen() {
     gallery,
     issues,
     aboutDetails,
+    politicalBanners,
     carouselIntervalMs,
     refreshAppConfig,
     currentUser,
@@ -644,24 +645,54 @@ export default function HomeScreen() {
             decelerationRate="fast"
             snapToInterval={SCREEN_WIDTH - 32 + 12}
           >
-            {[
-              { id: "pb-1", bg: "#9A3412", title: "धनुष्यबाण चिन्हासमोरील\nबटण दाबा!", subtitle: "श्री. सचिन मलिक यांना प्रचंड बहुमताने निवडून द्या!", badge: "चुनाव मोहीम २०२६", icon: "bullhorn", rightLabel: "शिवसेना" },
-              { id: "pb-2", bg: "#1D4ED8", title: "कोपरगावसाठी\nसर्वांगीण विकास!", subtitle: "रस्ते, पाणी, वीज, शिक्षण आणि रोजगार — आमचे वचन!", badge: "विकास अजेंडा", icon: "city-variant-outline", rightLabel: "विकास" },
-              { id: "pb-3", bg: "#065F46", title: "शेतकरी बांधवांचा\nसर्वांगीण विकास!", subtitle: "सिंचन, कर्जमाफी, वीज आणि कृषी मदत — आमची जबाबदारी!", badge: "शेतकरी सन्मान", icon: "sprout", rightLabel: "शेती" },
-            ].map((pb) => (
-              <View key={pb.id} style={[styles.politicalBannerCard, { backgroundColor: pb.bg }]}>
+            {(politicalBanners && politicalBanners.length > 0 ? politicalBanners : [
+              {
+                id: "pb-1",
+                bg: "#C2410C",
+                title: "आपला हक्काचा माणूस,\nसचिन मलिक!",
+                subtitle: "जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!",
+                badge: "जनसेवा मोहीम २०२६",
+                icon: "account-group",
+                rightLabel: "लोकनेता",
+                ctaText: "अधिक जाणून घ्या",
+                ctaRoute: "/about",
+              },
+              {
+                id: "pb-2",
+                bg: "#1D4ED8",
+                title: "कोपरगावसाठी\nसर्वांगीण विकास!",
+                subtitle: "रस्ते, पाणी, वीज, शिक्षण आणि रोजगार — आमचे वचन!",
+                badge: "विकास अजेंडा",
+                icon: "city-variant-outline",
+                rightLabel: "विकास",
+                ctaText: "अधिक जाणून घ्या",
+                ctaRoute: "/about",
+              },
+              {
+                id: "pb-3",
+                bg: "#065F46",
+                title: "शेतकरी बांधवांचा\nसर्वांगीण विकास!",
+                subtitle: "सिंचन, कर्जमाफी, वीज आणि कृषी मदत — आमची जबाबदारी!",
+                badge: "शेतकरी सन्मान",
+                icon: "sprout",
+                rightLabel: "शेती",
+                ctaText: "अधिक जाणून घ्या",
+                ctaRoute: "/about",
+              },
+            ]).map((pb) => (
+              <View key={pb.id} style={[styles.politicalBannerCard, { backgroundColor: pb.bg || "#C2410C" }]}>
                 <View style={styles.politicalBannerTopRow}>
                   <View style={styles.politicalBannerBadge}>
                     <Text style={styles.politicalBannerBadgeText}>{pb.badge}</Text>
                   </View>
                   <View style={styles.politicalBannerPartyBadge}>
-                    <Icon source="bullhorn" size={12} color="#FFF" />
-                    <Text style={styles.politicalBannerPartyText}>{pb.rightLabel}</Text>
+                    <Icon source={((pb.icon as any) || "bullhorn")} size={12} color="#FFF" />
+                    <Text style={styles.politicalBannerPartyText}>{pb.rightLabel || (pb as any).right_label || "जनसेवा"}</Text>
                   </View>
                 </View>
                 <View style={styles.politicalBannerCenter}>
                   <View style={styles.politicalBannerIconRing}>
-                    <Icon source={pb.icon} size={32} color="#FFFFFF" />
+                    <Icon source={((pb.icon as any) || "account-group")} size={32} color="#FFFFFF" />
                   </View>
                   <Text style={styles.politicalBannerTitle}>{pb.title}</Text>
                   <Text style={styles.politicalBannerSubtitle}>{pb.subtitle}</Text>
@@ -669,9 +700,9 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   style={styles.politicalBannerCTA}
                   activeOpacity={0.85}
-                  onPress={() => router.push("/about" as any)}
+                  onPress={() => router.push(((pb.ctaRoute || (pb as any).cta_route || "/about") as any))}
                 >
-                  <Text style={styles.politicalBannerCTAText}>आधिक जाणून घ्या</Text>
+                  <Text style={styles.politicalBannerCTAText}>{pb.ctaText || (pb as any).cta_text || "अधिक जाणून घ्या"}</Text>
                   <Icon source="arrow-right" size={16} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>

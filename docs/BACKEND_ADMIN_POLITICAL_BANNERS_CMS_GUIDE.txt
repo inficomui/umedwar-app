@@ -1,0 +1,1176 @@
+================================================================================
+POLITICAL CAMPAIGN BANNERS (राजकीय प्रचार व विकास मोहीम बॅनर कार्ड्स)
+BACKEND & ADMIN PANEL CMS COMPLETE IMPLEMENTATION GUIDE
+================================================================================
+Project: "मी सचिन मलिक" (Umedwar Mobile App & Web Admin Dashboard)
+Domain: https://backend.misachinmalik.in
+Target Module: "राजकीय प्रचार बॅनर कार्ड्स (Political Campaign Banners CMS)"
+Author: Core Engineering Team
+Date: 24 November 2026
+Format: Technical Implementation Specification (.txt)
+================================================================================
+
+TABLE OF CONTENTS:
+1. ARCHITECTURAL OVERVIEW & MOBILE APP INTEGRATION
+2. DATABASE SCHEMA SPECIFICATION (MySQL / PostgreSQL / Prisma)
+3. REST API ENDPOINTS CONTRACT
+4. COMPLETE BACKEND CODE (Node.js / Express.js / TypeScript)
+5. LARAVEL / PHP CONTROLLER CODE (Alternative Backend Option)
+6. ADMIN PANEL UI COMPONENT (React.js / Next.js / Tailwind CSS)
+7. SEED DATA SCRIPT & MIGRATION
+8. VERIFICATION CURL COMMANDS & TROUBLESHOOTING
+
+================================================================================
+1. ARCHITECTURAL OVERVIEW & MOBILE APP INTEGRATION
+================================================================================
+
+The Mobile App displays an interactive horizontal swipe strip of Political Campaign
+Banners right on the Home Page ("Section: Political Campaign Banners").
+
+Each card in this section features:
+  * `id`: Unique identifier (e.g. 1, 2, "pb-1")
+  * `bg`: Distinctive vibrant background color (e.g. #C2410C, #1D4ED8, #065F46)
+  * `title`: Primary Marathi campaign heading (e.g. "आपला हक्काचा माणूस,\nसचिन मलिक!")
+  * `subtitle`: Detailed message or pledge (e.g. "जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!")
+  * `badge`: Top-left pill label (e.g. "जनसेवा मोहीम २०२६", "विकास अजेंडा")
+  * `rightLabel`: Top-right label/party (e.g. "लोकनेता", "विकास", "शेती")
+  * `icon`: Center icon name (Material Community / Paper icon e.g. "account-group", "bullhorn", "city-variant-outline", "sprout")
+  * `ctaText`: Action button label (e.g. "अधिक जाणून घ्या")
+  * `ctaRoute`: Navigation target inside the mobile app (e.g. "/about", "/resolutions", "/news", "/contact")
+  * `sortOrder`: Display order integer
+  * `isActive`: Boolean toggle (1 = visible in app, 0 = hidden)
+
+MOBILE APP CONSUMPTION:
+The mobile app automatically pulls active banners from the existing unified endpoint:
+  GET https://backend.misachinmalik.in/api/v1/app-config
+
+Under the response key: `data.politicalBanners` (or `data.political_banners`).
+If the backend does not return banners, the mobile app falls back to the default seed banners.
+
+
+================================================================================
+2. DATABASE SCHEMA SPECIFICATION (MySQL / PostgreSQL / Prisma)
+================================================================================
+
+2.1 RAW SQL TABLE CREATION SCRIPT:
+--------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `political_banners` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `candidate_id` VARCHAR(100) NOT NULL DEFAULT 'sachin-malik',
+  `bg_color` VARCHAR(25) NOT NULL DEFAULT '#C2410C',
+  `title` VARCHAR(255) NOT NULL,
+  `subtitle` TEXT NOT NULL,
+  `badge` VARCHAR(100) NOT NULL DEFAULT 'जनसेवा मोहीम २०२६',
+  `icon` VARCHAR(100) NOT NULL DEFAULT 'account-group',
+  `right_label` VARCHAR(100) NOT NULL DEFAULT 'लोकनेता',
+  `cta_text` VARCHAR(100) NOT NULL DEFAULT 'अधिक जाणून घ्या',
+  `cta_route` VARCHAR(100) NOT NULL DEFAULT '/about',
+  `sort_order` INT NOT NULL DEFAULT 1,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_pb_candidate` (`candidate_id`),
+  INDEX `idx_pb_active_order` (`is_active`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+2.2 PRISMA ORM SCHEMA DEFINITION (`schema.prisma`):
+--------------------------------------------------------------------------------
+model PoliticalBanner {
+  id          BigInt   @id @default(autoincrement())
+  candidateId String   @default("sachin-malik") @map("candidate_id") @db.VarChar(100)
+  bgColor     String   @default("#C2410C") @map("bg_color") @db.VarChar(25)
+  title       String   @db.VarChar(255)
+  subtitle    String   @db.Text
+  badge       String   @default("जनसेवा मोहीम २०२६") @db.VarChar(100)
+  icon        String   @default("account-group") @db.VarChar(100)
+  rightLabel  String   @default("लोकनेता") @map("right_label") @db.VarChar(100)
+  ctaText     String   @default("अधिक जाणून घ्या") @map("cta_text") @db.VarChar(100)
+  ctaRoute    String   @default("/about") @map("cta_route") @db.VarChar(100)
+  sortOrder   Int      @default(1) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([candidateId])
+  @@index([isActive, sortOrder])
+  @@map("political_banners")
+}
+
+
+================================================================================
+3. REST API ENDPOINTS CONTRACT
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 GET /api/v1/app-config (PUBLIC - Consumed by Mobile App)
+--------------------------------------------------------------------------------
+The backend app-config response should include the array under `data.politicalBanners`:
+
+Success Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "config": { ... },
+    "banners": [ ... ],
+    "politicalBanners": [
+      {
+        "id": 1,
+        "bg": "#C2410C",
+        "title": "आपला हक्काचा माणूस,\nसचिन मलिक!",
+        "subtitle": "जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!",
+        "badge": "जनसेवा मोहीम २०२६",
+        "icon": "account-group",
+        "rightLabel": "लोकनेता",
+        "ctaText": "अधिक जाणून घ्या",
+        "ctaRoute": "/about",
+        "sortOrder": 1,
+        "isActive": true
+      },
+      {
+        "id": 2,
+        "bg": "#1D4ED8",
+        "title": "कोपरगावसाठी\nसर्वांगीण विकास!",
+        "subtitle": "रस्ते, पाणी, वीज, शिक्षण आणि रोजगार — आमचे वचन!",
+        "badge": "विकास अजेंडा",
+        "icon": "city-variant-outline",
+        "rightLabel": "विकास",
+        "ctaText": "अधिक जाणून घ्या",
+        "ctaRoute": "/about",
+        "sortOrder": 2,
+        "isActive": true
+      },
+      {
+        "id": 3,
+        "bg": "#065F46",
+        "title": "शेतकरी बांधवांचा\nसर्वांगीण विकास!",
+        "subtitle": "सिंचन, कर्जमाफी, वीज आणि कृषी मदत — आमची जबाबदारी!",
+        "badge": "शेतकरी सन्मान",
+        "icon": "sprout",
+        "rightLabel": "शेती",
+        "ctaText": "अधिक जाणून घ्या",
+        "ctaRoute": "/about",
+        "sortOrder": 3,
+        "isActive": true
+      }
+    ]
+  }
+}
+
+--------------------------------------------------------------------------------
+3.2 GET /api/v1/admin/political-banners (PROTECTED - Admin Panel List)
+--------------------------------------------------------------------------------
+Authentication: Bearer <Admin_JWT_Token>
+Query Parameters:
+  - `status`: 'all' | 'active' | 'inactive' (default: 'all')
+  - `search`: string (search in title or subtitle)
+
+Success Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "banners": [
+      {
+        "id": 1,
+        "candidate_id": "sachin-malik",
+        "bg_color": "#C2410C",
+        "title": "आपला हक्काचा माणूस,\nसचिन मलिक!",
+        "subtitle": "जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!",
+        "badge": "जनसेवा मोहीम २०२६",
+        "icon": "account-group",
+        "right_label": "लोकनेता",
+        "cta_text": "अधिक जाणून घ्या",
+        "cta_route": "/about",
+        "sort_order": 1,
+        "is_active": 1,
+        "created_at": "2026-11-24T06:00:00.000Z",
+        "updated_at": "2026-11-24T06:00:00.000Z"
+      }
+    ],
+    "total": 3
+  }
+}
+
+--------------------------------------------------------------------------------
+3.3 POST /api/v1/admin/political-banners (PROTECTED - Create Banner)
+--------------------------------------------------------------------------------
+Authentication: Bearer <Admin_JWT_Token>
+Request Body:
+{
+  "bg": "#C2410C",                     // required hex color
+  "title": "आपला हक्काचा माणूस,\nसचिन मलिक!", // required
+  "subtitle": "जनसेवेसाठी सदैव तत्पर...", // required
+  "badge": "जनसेवा मोहीम २०२६",         // optional
+  "icon": "account-group",             // optional
+  "rightLabel": "लोकनेता",              // optional
+  "ctaText": "अधिक जाणून घ्या",         // optional
+  "ctaRoute": "/about",                // optional
+  "sortOrder": 1,                      // optional
+  "isActive": true                     // optional (default: true)
+}
+
+Success Response (201 Created):
+{
+  "success": true,
+  "message": "प्रचार बॅनर यशस्वीरीत्या तयार झाला.",
+  "data": { "id": 4, ... }
+}
+
+--------------------------------------------------------------------------------
+3.4 PUT /api/v1/admin/political-banners/:id (PROTECTED - Update Banner)
+--------------------------------------------------------------------------------
+Authentication: Bearer <Admin_JWT_Token>
+Request Body:
+{
+  "bg": "#C2410C",
+  "title": "नवीन शीर्षक...",
+  "subtitle": "नवीन उपशीर्षक...",
+  "badge": "मोहीम",
+  "icon": "bullhorn",
+  "rightLabel": "युवाशक्ती",
+  "ctaText": "पहा",
+  "ctaRoute": "/about",
+  "sortOrder": 1,
+  "isActive": true
+}
+
+--------------------------------------------------------------------------------
+3.5 PATCH /api/v1/admin/political-banners/:id/status (PROTECTED - Toggle Active)
+--------------------------------------------------------------------------------
+Authentication: Bearer <Admin_JWT_Token>
+Request Body:
+{
+  "isActive": true // or false
+}
+
+--------------------------------------------------------------------------------
+3.6 DELETE /api/v1/admin/political-banners/:id (PROTECTED - Delete Banner)
+--------------------------------------------------------------------------------
+Authentication: Bearer <Admin_JWT_Token>
+
+--------------------------------------------------------------------------------
+3.7 POST /api/v1/admin/political-banners/reorder (PROTECTED - Reorder Banners)
+--------------------------------------------------------------------------------
+Authentication: Bearer <Admin_JWT_Token>
+Request Body:
+{
+  "order": [
+    { "id": 2, "sortOrder": 1 },
+    { "id": 1, "sortOrder": 2 },
+    { "id": 3, "sortOrder": 3 }
+  ]
+}
+
+
+================================================================================
+4. COMPLETE BACKEND CODE (Node.js / Express.js / TypeScript)
+================================================================================
+
+4.1 CONTROLLER (`src/controllers/politicalBanner.controller.ts`):
+--------------------------------------------------------------------------------
+import { Request, Response } from 'express';
+import { db } from '../config/database';
+
+export class PoliticalBannerController {
+  /**
+   * Helper to fetch active banners for public app-config
+   */
+  static async getActiveBannersForApp(candidateId: string = 'sachin-malik') {
+    const [rows]: any = await db.query(
+      `SELECT id, bg_color as bg, title, subtitle, badge, icon, 
+              right_label as rightLabel, cta_text as ctaText, 
+              cta_route as ctaRoute, sort_order as sortOrder, is_active as isActive
+       FROM political_banners
+       WHERE candidate_id = ? AND is_active = 1
+       ORDER BY sort_order ASC, id ASC`,
+      [candidateId]
+    );
+    return rows;
+  }
+
+  /**
+   * Admin: List all banners
+   * GET /api/v1/admin/political-banners
+   */
+  static async getAdminBanners(req: Request, res: Response) {
+    try {
+      const status = req.query.status as string;
+      const search = (req.query.search as string || '').trim();
+
+      let whereClauses: string[] = ['candidate_id = ?'];
+      let queryParams: any[] = ['sachin-malik'];
+
+      if (status === 'active') {
+        whereClauses.push('is_active = 1');
+      } else if (status === 'inactive') {
+        whereClauses.push('is_active = 0');
+      }
+
+      if (search) {
+        whereClauses.push('(title LIKE ? OR subtitle LIKE ? OR badge LIKE ?)');
+        const searchLike = `%${search}%`;
+        queryParams.push(searchLike, searchLike, searchLike);
+      }
+
+      const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
+
+      const [rows]: any = await db.query(
+        `SELECT id, candidate_id, bg_color, title, subtitle, badge, icon,
+                right_label, cta_text, cta_route, sort_order, is_active,
+                created_at, updated_at
+         FROM political_banners
+         ${whereSql}
+         ORDER BY sort_order ASC, id ASC`,
+        queryParams
+      );
+
+      return res.json({
+        success: true,
+        data: {
+          banners: rows,
+          total: rows.length,
+        },
+      });
+    } catch (error: any) {
+      console.error('[PoliticalBannerController] getAdminBanners error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Create new banner
+   * POST /api/v1/admin/political-banners
+   */
+  static async createBanner(req: Request, res: Response) {
+    try {
+      const b = req.body;
+      const candidateId = b.candidateId || b.candidate_id || 'sachin-malik';
+      const bg = b.bg || b.bg_color || '#C2410C';
+      const title = (b.title || '').trim();
+      const subtitle = (b.subtitle || '').trim();
+      const badge = (b.badge || 'जनसेवा मोहीम २०२६').trim();
+      const icon = (b.icon || 'account-group').trim();
+      const rightLabel = (b.rightLabel || b.right_label || 'लोकनेता').trim();
+      const ctaText = (b.ctaText || b.cta_text || 'अधिक जाणून घ्या').trim();
+      const ctaRoute = (b.ctaRoute || b.cta_route || '/about').trim();
+      const sortOrder = parseInt(b.sortOrder ?? b.sort_order ?? 1) || 1;
+      const isActive = b.isActive ?? b.is_active ?? true ? 1 : 0;
+
+      if (!title) {
+        return res.status(400).json({ success: false, message: 'शीर्षक (Title) भरणे आवश्यक आहे.' });
+      }
+      if (!subtitle) {
+        return res.status(400).json({ success: false, message: 'उपशीर्षक (Subtitle) भरणे आवश्यक आहे.' });
+      }
+
+      const [result]: any = await db.query(
+        `INSERT INTO political_banners 
+         (candidate_id, bg_color, title, subtitle, badge, icon, right_label, cta_text, cta_route, sort_order, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [candidateId, bg, title, subtitle, badge, icon, rightLabel, ctaText, ctaRoute, sortOrder, isActive]
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: 'प्रचार बॅनर यशस्वीरीत्या तयार केला गेला आहे.',
+        data: {
+          id: result.insertId,
+          bg,
+          title,
+          subtitle,
+          badge,
+          icon,
+          rightLabel,
+          ctaText,
+          ctaRoute,
+          sortOrder,
+          isActive: Boolean(isActive),
+        },
+      });
+    } catch (error: any) {
+      console.error('[PoliticalBannerController] createBanner error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Update banner
+   * PUT /api/v1/admin/political-banners/:id
+   */
+  static async updateBanner(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const b = req.body;
+      const bg = b.bg || b.bg_color || '#C2410C';
+      const title = (b.title || '').trim();
+      const subtitle = (b.subtitle || '').trim();
+      const badge = (b.badge || 'जनसेवा मोहीम २०२६').trim();
+      const icon = (b.icon || 'account-group').trim();
+      const rightLabel = (b.rightLabel || b.right_label || 'लोकनेता').trim();
+      const ctaText = (b.ctaText || b.cta_text || 'अधिक जाणून घ्या').trim();
+      const ctaRoute = (b.ctaRoute || b.cta_route || '/about').trim();
+      const sortOrder = parseInt(b.sortOrder ?? b.sort_order ?? 1) || 1;
+      const isActive = b.isActive ?? b.is_active ?? true ? 1 : 0;
+
+      if (!title || !subtitle) {
+        return res.status(400).json({ success: false, message: 'Title आणि Subtitle दोन्ही आवश्यक आहेत.' });
+      }
+
+      const [result]: any = await db.query(
+        `UPDATE political_banners 
+         SET bg_color = ?, title = ?, subtitle = ?, badge = ?, icon = ?, 
+             right_label = ?, cta_text = ?, cta_route = ?, sort_order = ?, is_active = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [bg, title, subtitle, badge, icon, rightLabel, ctaText, ctaRoute, sortOrder, isActive, id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Banner not found.' });
+      }
+
+      return res.json({
+        success: true,
+        message: 'प्रचार बॅनर यशस्वीरीत्या अद्ययावत (Update) झाला आहे.',
+      });
+    } catch (error: any) {
+      console.error('[PoliticalBannerController] updateBanner error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Toggle status
+   * PATCH /api/v1/admin/political-banners/:id/status
+   */
+  static async toggleStatus(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+      const activeVal = isActive ? 1 : 0;
+
+      await db.query(
+        `UPDATE political_banners SET is_active = ?, updated_at = NOW() WHERE id = ?`,
+        [activeVal, id]
+      );
+
+      return res.json({ success: true, message: 'स्थिती यशस्वीरीत्या बदलली.' });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Delete banner
+   * DELETE /api/v1/admin/political-banners/:id
+   */
+  static async deleteBanner(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      await db.query(`DELETE FROM political_banners WHERE id = ?`, [id]);
+      return res.json({ success: true, message: 'बॅनर यशस्वीरीत्या हटवला गेला.' });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+
+  /**
+   * Admin: Batch reorder banners
+   * POST /api/v1/admin/political-banners/reorder
+   */
+  static async reorderBanners(req: Request, res: Response) {
+    try {
+      const { order } = req.body; // Array of { id, sortOrder }
+      if (Array.isArray(order)) {
+        for (const item of order) {
+          await db.query(`UPDATE political_banners SET sort_order = ? WHERE id = ?`, [
+            item.sortOrder,
+            item.id,
+          ]);
+        }
+      }
+      return res.json({ success: true, message: 'क्रमवारी यशस्वीरीत्या जतन केली.' });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+}
+
+4.2 EXPRESS ROUTE WIRING (`src/routes/politicalBanner.routes.ts`):
+--------------------------------------------------------------------------------
+import { Router } from 'express';
+import { PoliticalBannerController } from '../controllers/politicalBanner.controller';
+import { requireAdminAuth } from '../middleware/auth.middleware';
+
+const router = Router();
+
+// Protected Admin Routes
+router.get('/admin/political-banners', requireAdminAuth, PoliticalBannerController.getAdminBanners);
+router.post('/admin/political-banners', requireAdminAuth, PoliticalBannerController.createBanner);
+router.put('/admin/political-banners/:id', requireAdminAuth, PoliticalBannerController.updateBanner);
+router.patch('/admin/political-banners/:id/status', requireAdminAuth, PoliticalBannerController.toggleStatus);
+router.delete('/admin/political-banners/:id', requireAdminAuth, PoliticalBannerController.deleteBanner);
+router.post('/admin/political-banners/reorder', requireAdminAuth, PoliticalBannerController.reorderBanners);
+
+export default router;
+
+
+================================================================================
+5. LARAVEL / PHP CONTROLLER CODE (Alternative Backend Option)
+================================================================================
+
+If backend runs on Laravel:
+
+// app/Http/Controllers/Api/PoliticalBannerController.php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\PoliticalBanner;
+
+class PoliticalBannerController extends Controller
+{
+    // GET /api/v1/admin/political-banners
+    public function index(Request $request)
+    {
+        $query = PoliticalBanner::where('candidate_id', 'sachin-malik');
+
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('is_active', $request->status === 'active' ? 1 : 0);
+        }
+
+        if ($request->filled('search')) {
+            $s = '%' . $request->search . '%';
+            $query->where(function ($q) use ($s) {
+                $q->where('title', 'like', $s)
+                  ->orWhere('subtitle', 'like', $s);
+            });
+        }
+
+        $banners = $query->orderBy('sort_order', 'asc')->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'banners' => $banners,
+                'total' => $banners->count(),
+            ]
+        ]);
+    }
+
+    // POST /api/v1/admin/political-banners
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'title'       => 'required|string|max:255',
+            'subtitle'    => 'required|string',
+            'bg_color'    => 'nullable|string|max:25',
+            'badge'       => 'nullable|string|max:100',
+            'icon'        => 'nullable|string|max:100',
+            'right_label' => 'nullable|string|max:100',
+            'cta_text'    => 'nullable|string|max:100',
+            'cta_route'   => 'nullable|string|max:100',
+            'sort_order'  => 'nullable|integer',
+            'is_active'   => 'nullable|boolean',
+        ]);
+
+        $banner = PoliticalBanner::create([
+            'candidate_id' => 'sachin-malik',
+            'bg_color'     => $validated['bg_color'] ?? '#C2410C',
+            'title'        => $validated['title'],
+            'subtitle'     => $validated['subtitle'],
+            'badge'        => $validated['badge'] ?? 'जनसेवा मोहीम २०२६',
+            'icon'         => $validated['icon'] ?? 'account-group',
+            'right_label'  => $validated['right_label'] ?? 'लोकनेता',
+            'cta_text'     => $validated['cta_text'] ?? 'अधिक जाणून घ्या',
+            'cta_route'    => $validated['cta_route'] ?? '/about',
+            'sort_order'   => $validated['sort_order'] ?? 1,
+            'is_active'    => $validated['is_active'] ?? true,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'प्रचार बॅनर तयार झाला.',
+            'data'    => $banner,
+        ], 201);
+    }
+
+    // PUT /api/v1/admin/political-banners/{id}
+    public function update(Request $request, $id)
+    {
+        $banner = PoliticalBanner::findOrFail($id);
+        $banner->update($request->all());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'प्रचार बॅनर अद्ययावत झाला.',
+            'data'    => $banner,
+        ]);
+    }
+
+    // DELETE /api/v1/admin/political-banners/{id}
+    public function destroy($id)
+    {
+        PoliticalBanner::destroy($id);
+        return response()->json(['success' => true, 'message' => 'बॅनर हटवला गेला.']);
+    }
+}
+
+
+================================================================================
+6. ADMIN PANEL UI COMPONENT (React.js / Next.js / Tailwind CSS)
+================================================================================
+
+Below is the complete, production-ready React component with Live Mobile Card Preview:
+`src/components/admin/PoliticalBannersManager.tsx`
+
+```tsx
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+interface PoliticalBanner {
+  id: number;
+  bg_color: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  icon: string;
+  right_label: string;
+  cta_text: string;
+  cta_route: string;
+  sort_order: number;
+  is_active: number | boolean;
+}
+
+const COLOR_PRESETS = [
+  { label: 'भगवा / केशर (Saffron)', value: '#C2410C' },
+  { label: 'गडद नारंगी (Orange)', value: '#EA580C' },
+  { label: 'निळा (Royal Blue)', value: '#1D4ED8' },
+  { label: 'हिरवा (Emerald Green)', value: '#065F46' },
+  { label: 'जांभळा (Purple)', value: '#6D28D9' },
+  { label: 'तपकिरी (Maroon)', value: '#9A3412' },
+  { label: 'काळा (Midnight Black)', value: '#18181B' },
+];
+
+const ICON_PRESETS = [
+  { label: 'लोकसमूह (People)', value: 'account-group' },
+  { label: 'भोंगा / घोषणा (Bullhorn)', value: 'bullhorn' },
+  { label: 'शहराचा विकास (City)', value: 'city-variant-outline' },
+  { label: 'शेती / पीक (Crop)', value: 'sprout' },
+  { label: 'मदत / सेवा (Hand Heart)', value: 'hand-heart' },
+  { label: 'विजय / चषक (Trophy)', value: 'trophy' },
+  { label: 'शिक्षण (School)', value: 'school' },
+  { label: 'पाणी / सिंचन (Water)', value: 'water' },
+];
+
+export default function PoliticalBannersManager() {
+  const [banners, setBanners] = useState<PoliticalBanner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<PoliticalBanner | null>(null);
+
+  // Form State
+  const [formBg, setFormBg] = useState('#C2410C');
+  const [formTitle, setFormTitle] = useState('');
+  const [formSubtitle, setFormSubtitle] = useState('');
+  const [formBadge, setFormBadge] = useState('जनसेवा मोहीम २०२६');
+  const [formIcon, setFormIcon] = useState('account-group');
+  const [formRightLabel, setFormRightLabel] = useState('लोकनेता');
+  const [formCtaText, setFormCtaText] = useState('अधिक जाणून घ्या');
+  const [formCtaRoute, setFormCtaRoute] = useState('/about');
+  const [formSortOrder, setFormSortOrder] = useState(1);
+  const [formIsActive, setFormIsActive] = useState(true);
+
+  const fetchBanners = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get('https://backend.misachinmalik.in/api/v1/admin/political-banners', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` },
+      });
+      if (res.data?.success) {
+        setBanners(res.data.data.banners || []);
+      }
+    } catch (err) {
+      console.error('Error fetching political banners:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBanners();
+  }, []);
+
+  const openCreateModal = () => {
+    setEditingBanner(null);
+    setFormBg('#C2410C');
+    setFormTitle('आपला हक्काचा माणूस,\nसचिन मलिक!');
+    setFormSubtitle('जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!');
+    setFormBadge('जनसेवा मोहीम २०२६');
+    setFormIcon('account-group');
+    setFormRightLabel('लोकनेता');
+    setFormCtaText('अधिक जाणून घ्या');
+    setFormCtaRoute('/about');
+    setFormSortOrder(banners.length + 1);
+    setFormIsActive(true);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (b: PoliticalBanner) => {
+    setEditingBanner(b);
+    setFormBg(b.bg_color || '#C2410C');
+    setFormTitle(b.title || '');
+    setFormSubtitle(b.subtitle || '');
+    setFormBadge(b.badge || '');
+    setFormIcon(b.icon || 'account-group');
+    setFormRightLabel(b.right_label || '');
+    setFormCtaText(b.cta_text || 'अधिक जाणून घ्या');
+    setFormCtaRoute(b.cta_route || '/about');
+    setFormSortOrder(b.sort_order || 1);
+    setFormIsActive(Boolean(b.is_active));
+    setModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        bg: formBg,
+        title: formTitle.trim(),
+        subtitle: formSubtitle.trim(),
+        badge: formBadge.trim(),
+        icon: formIcon,
+        rightLabel: formRightLabel.trim(),
+        ctaText: formCtaText.trim(),
+        ctaRoute: formCtaRoute.trim(),
+        sortOrder: formSortOrder,
+        isActive: formIsActive,
+      };
+
+      if (editingBanner) {
+        await axios.put(
+          `https://backend.misachinmalik.in/api/v1/admin/political-banners/${editingBanner.id}`,
+          payload,
+          { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+        );
+      } else {
+        await axios.post(
+          'https://backend.misachinmalik.in/api/v1/admin/political-banners',
+          payload,
+          { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+        );
+      }
+
+      setModalOpen(false);
+      fetchBanners();
+    } catch (err) {
+      alert('बॅनर सेव्ह करताना त्रुटी आली.');
+    }
+  };
+
+  const toggleStatus = async (id: number, currentStatus: boolean | number) => {
+    try {
+      await axios.patch(
+        `https://backend.misachinmalik.in/api/v1/admin/political-banners/${id}/status`,
+        { isActive: !currentStatus },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+      );
+      fetchBanners();
+    } catch (err) {
+      alert('Status update failed');
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('हा प्रचार बॅनर हटवायचा आहे का?')) return;
+    try {
+      await axios.delete(
+        `https://backend.misachinmalik.in/api/v1/admin/political-banners/${id}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } }
+      );
+      fetchBanners();
+    } catch (err) {
+      alert('Delete failed');
+    }
+  };
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Top Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            राजकीय प्रचार बॅनर कार्ड्स (Political Campaign Banners)
+          </h1>
+          <p className="text-sm text-gray-500">
+            मोबाईल ॲपच्या मुख्य पानावर स्क्रोल होणारे प्रचार, घोषणा व मोहीम कार्ड्स व्यवस्थापित करा
+          </p>
+        </div>
+        <button
+          onClick={openCreateModal}
+          className="px-4 py-2 bg-orange-600 text-white rounded-xl text-sm font-bold hover:bg-orange-700 shadow-md flex items-center gap-2"
+        >
+          <span>➕</span> नवीन बॅनर जोडा
+        </button>
+      </div>
+
+      {/* Grid of Banners */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading ? (
+          <div className="col-span-3 p-12 text-center text-gray-500 font-semibold">
+            बॅनर्स लोड होत आहेत...
+          </div>
+        ) : banners.length === 0 ? (
+          <div className="col-span-3 p-12 text-center text-gray-400 font-medium bg-white rounded-2xl border">
+            कोणतेही प्रचार बॅनर आढळले नाहीत.
+          </div>
+        ) : (
+          banners.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-2xl p-5 shadow-lg flex flex-col justify-between text-white relative transition-transform hover:-translate-y-1"
+              style={{ backgroundColor: item.bg_color }}
+            >
+              {/* Top Row */}
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xs px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md font-bold uppercase tracking-wider">
+                  {item.badge}
+                </span>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-black/25 font-bold">
+                  {item.right_label}
+                </span>
+              </div>
+
+              {/* Center Content */}
+              <div className="my-4 text-center">
+                <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-inner">
+                  📢
+                </div>
+                <h3 className="text-lg font-black whitespace-pre-line leading-snug">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-white/90 mt-2 font-medium leading-relaxed">
+                  {item.subtitle}
+                </p>
+              </div>
+
+              {/* Bottom CTA & Actions */}
+              <div className="mt-4 pt-3 border-t border-white/20 flex justify-between items-center">
+                <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-lg">
+                  {item.cta_text} →
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => toggleStatus(item.id, item.is_active)}
+                    className={`text-xs px-2 py-1 rounded font-bold ${
+                      item.is_active ? 'bg-green-500 text-white' : 'bg-gray-400 text-black'
+                    }`}
+                  >
+                    {item.is_active ? 'सक्रिय' : 'बंद'}
+                  </button>
+                  <button
+                    onClick={() => openEditModal(item)}
+                    className="text-xs bg-white text-gray-900 px-2.5 py-1 rounded font-bold hover:bg-gray-100"
+                  >
+                    बदला
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    className="text-xs bg-red-600 text-white px-2 py-1 rounded font-bold hover:bg-red-700"
+                  >
+                    हटवा
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Create / Edit Modal with Live Preview */}
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-black text-gray-900">
+                {editingBanner ? 'प्रचार बॅनर संपादित करा' : 'नवीन प्रचार बॅनर तयार करा'}
+              </h3>
+              <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">
+                ✕
+              </button>
+            </div>
+
+            {/* LIVE CARD PREVIEW */}
+            <div className="mb-6">
+              <label className="text-xs font-bold text-gray-500 uppercase block mb-2">
+                मोबाईल ॲपमधील लाईव्ह प्रिव्ह्यू (Live Preview):
+              </label>
+              <div
+                className="rounded-2xl p-5 shadow-lg text-white max-w-sm mx-auto transition-colors"
+                style={{ backgroundColor: formBg }}
+              >
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-white/20 font-bold uppercase">
+                    {formBadge || 'बॅज'}
+                  </span>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-black/25 font-bold">
+                    {formRightLabel || 'लेबल'}
+                  </span>
+                </div>
+                <div className="text-center my-3">
+                  <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-white/20 flex items-center justify-center text-xl">
+                    📢
+                  </div>
+                  <h4 className="text-base font-black whitespace-pre-line leading-snug">
+                    {formTitle || 'कार्डचे शीर्षक येथे दिसेल'}
+                  </h4>
+                  <p className="text-xs text-white/90 mt-1 font-medium leading-relaxed">
+                    {formSubtitle || 'कार्डचे उपशीर्षक किंवा सविस्तर संदेश येथे दिसेल.'}
+                  </p>
+                </div>
+                <div className="mt-3 pt-2 border-t border-white/20 flex justify-center">
+                  <span className="text-xs font-bold bg-white/25 px-3 py-1 rounded-lg">
+                    {formCtaText} →
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <form onSubmit={handleSave} className="space-y-4">
+              {/* Background Color Selector */}
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">पार्श्वभूमी रंग (Background Color):</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {COLOR_PRESETS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setFormBg(c.value)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 border-2 ${
+                        formBg === c.value ? 'border-black scale-105 shadow' : 'border-transparent opacity-85'
+                      }`}
+                      style={{ backgroundColor: c.value }}
+                    >
+                      <span>{c.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={formBg}
+                  onChange={(e) => setFormBg(e.target.value)}
+                  placeholder="#C2410C"
+                  className="w-full px-3 py-2 border rounded-xl text-sm font-mono"
+                />
+              </div>
+
+              {/* Title Input */}
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">
+                  मुख्य शीर्षक (Title) - ओळ तोडण्यासाठी Enter दाबा: *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  placeholder="आपला हक्काचा माणूस,&#10;सचिन मलिक!"
+                  className="w-full px-3 py-2 border rounded-xl text-sm font-semibold"
+                />
+              </div>
+
+              {/* Subtitle Input */}
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">उपशीर्षक / संदेश (Subtitle): *</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={formSubtitle}
+                  onChange={(e) => setFormSubtitle(e.target.value)}
+                  placeholder="जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!"
+                  className="w-full px-3 py-2 border rounded-xl text-sm"
+                />
+              </div>
+
+              {/* Badge & Right Label */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">डावीकडील बॅज (Badge):</label>
+                  <input
+                    type="text"
+                    value={formBadge}
+                    onChange={(e) => setFormBadge(e.target.value)}
+                    placeholder="जनसेवा मोहीम २०२६"
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">उजवीकडील लेबल (Right Label):</label>
+                  <input
+                    type="text"
+                    value={formRightLabel}
+                    onChange={(e) => setFormRightLabel(e.target.value)}
+                    placeholder="लोकनेता"
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* CTA & Route */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">बटन मजकूर (CTA Text):</label>
+                  <input
+                    type="text"
+                    value={formCtaText}
+                    onChange={(e) => setFormCtaText(e.target.value)}
+                    placeholder="अधिक जाणून घ्या"
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">ॲपमधील मार्ग (Target Route):</label>
+                  <input
+                    type="text"
+                    value={formCtaRoute}
+                    onChange={(e) => setFormCtaRoute(e.target.value)}
+                    placeholder="/about किंवा /resolutions किंवा /contact"
+                    className="w-full px-3 py-2 border rounded-xl text-sm font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Sort Order & Active Switch */}
+              <div className="flex justify-between items-center pt-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-gray-700">क्रमवारी (Sort Order):</label>
+                  <input
+                    type="number"
+                    value={formSortOrder}
+                    onChange={(e) => setFormSortOrder(parseInt(e.target.value) || 1)}
+                    className="w-20 px-2 py-1 border rounded-lg text-sm text-center font-bold"
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formIsActive}
+                    onChange={(e) => setFormIsActive(e.target.checked)}
+                    className="w-4 h-4 text-orange-600 rounded"
+                  />
+                  <span className="text-xs font-bold text-gray-800">मोबाईल ॲपमध्ये सक्रिय ठेवा (Active)</span>
+                </label>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100"
+                >
+                  रद्द करा
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-orange-600 text-white rounded-xl text-sm font-bold hover:bg-orange-700 shadow-md"
+                >
+                  {editingBanner ? 'बदल जतन करा' : 'तयार करा'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+
+================================================================================
+7. SEED DATA SCRIPT & MIGRATION
+================================================================================
+
+Run this SQL query to populate the database with the updated 3 default campaign banners:
+
+```sql
+INSERT INTO `political_banners` 
+  (`id`, `candidate_id`, `bg_color`, `title`, `subtitle`, `badge`, `icon`, `right_label`, `cta_text`, `cta_route`, `sort_order`, `is_active`)
+VALUES
+  (1, 'sachin-malik', '#C2410C', 'आपला हक्काचा माणूस,\nसचिन मलिक!', 'जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!', 'जनसेवा मोहीम २०२६', 'account-group', 'लोकनेता', 'अधिक जाणून घ्या', '/about', 1, 1),
+  (2, 'sachin-malik', '#1D4ED8', 'कोपरगावसाठी\nसर्वांगीण विकास!', 'रस्ते, पाणी, वीज, शिक्षण आणि रोजगार — आमचे वचन!', 'विकास अजेंडा', 'city-variant-outline', 'विकास', 'अधिक जाणून घ्या', '/about', 2, 1),
+  (3, 'sachin-malik', '#065F46', 'शेतकरी बांधवांचा\nसर्वांगीण विकास!', 'सिंचन, कर्जमाफी, वीज आणि कृषी मदत — आमची जबाबदारी!', 'शेतकरी सन्मान', 'sprout', 'शेती', 'अधिक जाणून घ्या', '/about', 3, 1)
+ON DUPLICATE KEY UPDATE
+  `bg_color` = VALUES(`bg_color`),
+  `title` = VALUES(`title`),
+  `subtitle` = VALUES(`subtitle`),
+  `badge` = VALUES(`badge`),
+  `icon` = VALUES(`icon`),
+  `right_label` = VALUES(`right_label`),
+  `updated_at` = NOW();
+```
+
+
+================================================================================
+8. VERIFICATION CURL COMMANDS & TROUBLESHOOTING
+================================================================================
+
+1. TEST FETCHING ALL BANNERS FOR ADMIN:
+curl -s -X GET "https://backend.misachinmalik.in/api/v1/admin/political-banners" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \
+  -H "Accept: application/json"
+
+Expected 200 OK:
+{"success":true,"data":{"banners":[{"id":1,"title":"आपला हक्काचा माणूस,...",...}],"total":3}}
+
+
+2. TEST CREATING A NEW CAMPAIGN BANNER:
+curl -s -X POST "https://backend.misachinmalik.in/api/v1/admin/political-banners" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bg": "#C2410C",
+    "title": "युवाशक्तीचा जागर,\nकोपरगावचा नवा मार्ग!",
+    "subtitle": "तरुणांसाठी आयटी पार्क, स्पर्धा परीक्षा केंद्र व क्रीडा संकुल!",
+    "badge": "युवा संकल्प २०२६",
+    "icon": "school",
+    "rightLabel": "युवा",
+    "ctaText": "अधिक जाणून घ्या",
+    "ctaRoute": "/about",
+    "sortOrder": 4,
+    "isActive": true
+  }'
+
+Expected 201 Created:
+{"success":true,"message":"प्रचार बॅनर यशस्वीरीत्या तयार केला गेला आहे.","data":{"id":4,...}}
+
+
+3. TEST UPDATING AN EXISTING BANNER:
+curl -s -X PUT "https://backend.misachinmalik.in/api/v1/admin/political-banners/1" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bg": "#C2410C",
+    "title": "आपला हक्काचा माणूस,\nसचिन मलिक!",
+    "subtitle": "कोपरगावच्या उज्वल भविष्यासाठी आणि विकासासाठी एकजुटीने पुढे जाऊया!",
+    "badge": "जनसेवा मोहीम २०२६",
+    "icon": "account-group",
+    "rightLabel": "लोकनेता",
+    "ctaText": "अधिक जाणून घ्या",
+    "ctaRoute": "/about",
+    "sortOrder": 1,
+    "isActive": true
+  }'
+
+
+4. TEST PUBLIC APP CONFIG SYNC:
+curl -s -X GET "https://backend.misachinmalik.in/api/v1/app-config" \
+  -H "Accept: application/json"
+
+Verify that `data.politicalBanners` array is returned with all active banners.
+
+================================================================================
+END OF IMPLEMENTATION GUIDE
+================================================================================

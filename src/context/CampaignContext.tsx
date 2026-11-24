@@ -18,6 +18,7 @@ import {
   JourneyMilestone,
   SocialWorkItem,
   GalleryItem,
+  PoliticalBannerCard,
 } from "../services/appConfigApi";
 import {
   triggerLocalNotification,
@@ -182,6 +183,8 @@ export interface CampaignContextType {
   gallery: GalleryItem[];
   setGallery: (gallery: GalleryItem[]) => void;
   refreshGallery: () => Promise<void>;
+  politicalBanners: PoliticalBannerCard[];
+  setPoliticalBanners: (banners: PoliticalBannerCard[]) => void;
   currentUser: UserProfile | null;
   isLoggedIn: boolean;
   login: (user: UserProfile) => Promise<void>;
@@ -303,6 +306,48 @@ const DEFAULT_NEWS_ARTICLES: NewsArticleItem[] = [];
 
 export const DEFAULT_GALLERY_ITEMS: GalleryItem[] = [];
 
+export const DEFAULT_POLITICAL_BANNERS: PoliticalBannerCard[] = [
+  {
+    id: "pb-1",
+    bg: "#C2410C",
+    title: "आपला हक्काचा माणूस,\nसचिन मलिक!",
+    subtitle: "जनसेवेसाठी सदैव तत्पर, कोपरगावच्या सर्वांगीण विकासासाठी कटिबद्ध!",
+    badge: "जनसेवा मोहीम २०२६",
+    icon: "account-group",
+    rightLabel: "लोकनेता",
+    ctaText: "अधिक जाणून घ्या",
+    ctaRoute: "/about",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "pb-2",
+    bg: "#1D4ED8",
+    title: "कोपरगावसाठी\nसर्वांगीण विकास!",
+    subtitle: "रस्ते, पाणी, वीज, शिक्षण आणि रोजगार — आमचे वचन!",
+    badge: "विकास अजेंडा",
+    icon: "city-variant-outline",
+    rightLabel: "विकास",
+    ctaText: "अधिक जाणून घ्या",
+    ctaRoute: "/about",
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    id: "pb-3",
+    bg: "#065F46",
+    title: "शेतकरी बांधवांचा\nसर्वांगीण विकास!",
+    subtitle: "सिंचन, कर्जमाफी, वीज आणि कृषी मदत — आमची जबाबदारी!",
+    badge: "शेतकरी सन्मान",
+    icon: "sprout",
+    rightLabel: "शेती",
+    ctaText: "अधिक जाणून घ्या",
+    ctaRoute: "/about",
+    sortOrder: 3,
+    isActive: true,
+  },
+];
+
 const CampaignContext = createContext<CampaignContextType | undefined>(undefined);
 
 export function CampaignProvider({ children }: { children: React.ReactNode }) {
@@ -312,6 +357,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
   const [contact, setContact] = useState<ContactInfo>(DEFAULT_CONTACT);
   const [quoteCard, setQuoteCard] = useState<QuoteCardInfo>(DEFAULT_QUOTE_CARD);
   const [carouselBanners, setCarouselBanners] = useState<CarouselBanner[]>(DEFAULT_BANNERS);
+  const [politicalBanners, setPoliticalBanners] = useState<PoliticalBannerCard[]>(DEFAULT_POLITICAL_BANNERS);
   const [customAdBanners] = useState<CustomAdBanner[]>(CUSTOM_AD_BANNERS);
   const [videoGallery, setVideoGallery] = useState<VideoGalleryItem[]>(VIDEO_GALLERY_ITEMS);
   const [resolutions, setResolutions] = useState<ResolutionItem[]>(DEFAULT_RESOLUTIONS);
@@ -421,6 +467,24 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
             };
           });
           setCarouselBanners(mappedBanners);
+        }
+
+        const rawPB = (res.data as any).politicalBanners || (res.data as any).political_banners;
+        if (Array.isArray(rawPB) && rawPB.length > 0) {
+          const mappedPB: PoliticalBannerCard[] = rawPB.map((b: any, idx: number) => ({
+            id: String(b.id || `pb-${idx + 1}`),
+            bg: b.bg || b.backgroundColor || b.background_color || "#C2410C",
+            title: b.title || "",
+            subtitle: b.subtitle || "",
+            badge: b.badge || "मोहीम २०२६",
+            icon: b.icon || "bullhorn",
+            rightLabel: b.rightLabel || b.right_label || "जनसेवा",
+            ctaText: b.ctaText || b.cta_text || "अधिक जाणून घ्या",
+            ctaRoute: b.ctaRoute || b.cta_route || "/about",
+            sortOrder: b.sortOrder ?? b.sort_order ?? idx + 1,
+            isActive: b.isActive ?? b.is_active ?? true,
+          }));
+          setPoliticalBanners(mappedPB.filter((p) => p.isActive !== false));
         }
 
         // Fetch from new dynamic CMS endpoint GET /api/v1/sankalp
@@ -885,6 +949,8 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
         aboutDetails,
         newsArticles,
         notifications,
+        politicalBanners,
+        setPoliticalBanners,
         gallery,
         setGallery,
         refreshGallery,

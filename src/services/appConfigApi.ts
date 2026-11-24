@@ -109,6 +109,25 @@ export interface NotificationItem {
   isRead?: boolean;
 }
 
+export interface PoliticalBannerCard {
+  id: string | number;
+  bg?: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  icon?: string;
+  rightLabel?: string;
+  right_label?: string;
+  ctaText?: string;
+  cta_text?: string;
+  ctaRoute?: string;
+  cta_route?: string;
+  sortOrder?: number;
+  sort_order?: number;
+  isActive?: boolean;
+  is_active?: boolean;
+}
+
 export interface GalleryItem {
   id: string | number;
   category: "all" | "events" | "dialogue" | "meetings" | "media" | "other" | string;
@@ -183,6 +202,8 @@ export interface DynamicAppConfigResponse {
     news?: NewsArticleItem[];
     notifications?: NotificationItem[];
     gallery?: GalleryItem[];
+    politicalBanners?: PoliticalBannerCard[];
+    political_banners?: PoliticalBannerCard[];
   };
 }
 
