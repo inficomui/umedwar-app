@@ -71,6 +71,8 @@ export default function ContactScreen() {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [pincode, setPincode] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -109,6 +111,8 @@ export default function ContactScreen() {
       if (currentUser.name && !name) setName(currentUser.name);
       if (currentUser.mobile && !mobile) setMobile(currentUser.mobile);
       if (currentUser.email && !email) setEmail(currentUser.email);
+      if ((currentUser as any)?.address && !address) setAddress((currentUser as any).address);
+      if ((currentUser as any)?.pincode && !pincode) setPincode((currentUser as any).pincode);
     }
   }, [currentUser]);
 
@@ -119,6 +123,10 @@ export default function ContactScreen() {
     }
     if (!mobile.trim() || mobile.length < 10) {
       Alert.alert("कृपया वैध मोबाईल नंबर टाका", "१० अंकी मोबाईल नंबर भरणे आवश्यक आहे.");
+      return;
+    }
+    if (pincode.trim() && pincode.trim().length !== 6) {
+      Alert.alert("पिन कोड तपासा", "कृपया ६ अंकी वैध पिन कोड टाका.");
       return;
     }
     if (!message.trim()) {
@@ -132,6 +140,8 @@ export default function ContactScreen() {
         name: name.trim(),
         mobile: mobile.trim(),
         email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        pincode: pincode.trim() || undefined,
         message: message.trim(),
         userId: currentUser?.id,
         source: "contact_screen",
@@ -427,6 +437,39 @@ export default function ContactScreen() {
                   value={email}
                   onChangeText={setEmail}
                 />
+              </View>
+            </View>
+
+            {/* Input: Address & PIN Code Row */}
+            <View style={styles.inputsRow}>
+              {/* Address */}
+              <View style={styles.halfInputWrap}>
+                <View style={styles.inputInner}>
+                  <Icon source="map-marker-outline" size={17} color="#78716C" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="पत्ता / गावाचे नाव"
+                    placeholderTextColor="#A8A29E"
+                    value={address}
+                    onChangeText={setAddress}
+                  />
+                </View>
+              </View>
+
+              {/* PIN Code */}
+              <View style={styles.halfInputWrap}>
+                <View style={styles.inputInner}>
+                  <Icon source="numeric" size={17} color="#78716C" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="पिन कोड (६ अंकी)"
+                    placeholderTextColor="#A8A29E"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    value={pincode}
+                    onChangeText={setPincode}
+                  />
+                </View>
               </View>
             </View>
 

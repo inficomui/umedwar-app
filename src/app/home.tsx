@@ -80,6 +80,9 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [contactName, setContactName] = useState("");
   const [contactMobile, setContactMobile] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactAddress, setContactAddress] = useState("");
+  const [contactPincode, setContactPincode] = useState("");
   const [contactMessage, setContactMessage] = useState("");
   const [contactSent, setContactSent] = useState(false);
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
@@ -88,6 +91,9 @@ export default function HomeScreen() {
     if (currentUser) {
       if (currentUser.name && !contactName) setContactName(currentUser.name);
       if (currentUser.mobile && !contactMobile) setContactMobile(currentUser.mobile);
+      if (currentUser.email && !contactEmail) setContactEmail(currentUser.email);
+      if ((currentUser as any)?.address && !contactAddress) setContactAddress((currentUser as any).address);
+      if ((currentUser as any)?.pincode && !contactPincode) setContactPincode((currentUser as any).pincode);
     }
   }, [currentUser]);
 
@@ -104,6 +110,10 @@ export default function HomeScreen() {
       );
       return;
     }
+    if (contactPincode.trim() && contactPincode.trim().length !== 6) {
+      Alert.alert("पिन कोड तपासा", "कृपया ६ अंकी वैध पिन कोड टाका.");
+      return;
+    }
     if (!contactMessage.trim()) {
       Alert.alert("संदेश लिहा", "कृपया आपला संदेश किंवा सूचना लिहा.");
       return;
@@ -114,6 +124,9 @@ export default function HomeScreen() {
       await inquiryApi.submitInquiry({
         name: contactName.trim(),
         mobile: mobile.trim(),
+        email: contactEmail.trim() || undefined,
+        address: contactAddress.trim() || undefined,
+        pincode: contactPincode.trim() || undefined,
         message: contactMessage.trim(),
         userId: currentUser?.id,
         source: "home_page_quick_form",
@@ -981,6 +994,9 @@ export default function HomeScreen() {
                   setContactSent(false);
                   setContactName(currentUser?.name || "");
                   setContactMobile(currentUser?.mobile || "");
+                  setContactEmail(currentUser?.email || "");
+                  setContactAddress((currentUser as any)?.address || "");
+                  setContactPincode((currentUser as any)?.pincode || "");
                   setContactMessage("");
                 }}
               >
@@ -992,14 +1008,14 @@ export default function HomeScreen() {
               <Text style={styles.contactFormTitle}>🙏 संदेश पाठवा</Text>
               <TextInput
                 style={styles.contactInput}
-                placeholder="आपले नाव"
+                placeholder="आपले पूर्ण नाव *"
                 placeholderTextColor="#9CA3AF"
                 value={contactName}
                 onChangeText={setContactName}
               />
               <TextInput
                 style={styles.contactInput}
-                placeholder="मोबाईल नंबर (१० अंकी)"
+                placeholder="मोबाईल नंबर (१० अंकी) *"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="phone-pad"
                 maxLength={10}
@@ -1007,8 +1023,33 @@ export default function HomeScreen() {
                 onChangeText={setContactMobile}
               />
               <TextInput
+                style={styles.contactInput}
+                placeholder="ईमेल (पर्यायी)"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={contactEmail}
+                onChangeText={setContactEmail}
+              />
+              <TextInput
+                style={styles.contactInput}
+                placeholder="पत्ता / गावाचे नाव"
+                placeholderTextColor="#9CA3AF"
+                value={contactAddress}
+                onChangeText={setContactAddress}
+              />
+              <TextInput
+                style={styles.contactInput}
+                placeholder="पिन कोड (६ अंकी)"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="number-pad"
+                maxLength={6}
+                value={contactPincode}
+                onChangeText={setContactPincode}
+              />
+              <TextInput
                 style={[styles.contactInput, styles.contactMessageInput]}
-                placeholder="आपला संदेश किंवा सूचना लिहा..."
+                placeholder="आपला संदेश किंवा समस्या येथे लिहा... *"
                 placeholderTextColor="#9CA3AF"
                 value={contactMessage}
                 onChangeText={setContactMessage}

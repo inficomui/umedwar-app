@@ -15,6 +15,8 @@ export interface CreateInquiryInput {
   name: string;
   mobile: string;
   email?: string;
+  address?: string;
+  pincode?: string;
   subject?: string;
   message: string;
   userId?: string | number;
@@ -30,6 +32,8 @@ export interface InquiryItem {
   name: string;
   mobile: string;
   email?: string;
+  address?: string;
+  pincode?: string;
   subject?: string;
   message: string;
   status: "pending" | "in_progress" | "replied" | "closed";
@@ -62,6 +66,8 @@ class InquiryApiService {
         name: input.name.trim(),
         mobile: input.mobile.trim(),
         email: input.email ? input.email.trim() : null,
+        address: input.address ? input.address.trim() : null,
+        pincode: input.pincode ? input.pincode.trim() : null,
         subject: input.subject || "General Contact Inquiry",
         message: input.message.trim(),
         fcmToken: fcmToken || null,

@@ -26,9 +26,18 @@ TABLE OF CONTENTS:
 
 The "मी सचिन मलिक" mobile application collects citizen inquiries and contact
 messages from two primary touchpoints:
-1. Home Screen Quick Contact Form: "🙏 संदेश पाठवा" (Name, Mobile, Message)
+1. Home Screen Quick Contact Form: "🙏 संदेश पाठवा" (Name, Mobile, Email, Address, PIN Code, Message)
 2. Dedicated Contact Screen (`/contact`): Full contact inquiry with Name, Mobile,
-   Email, and Detailed Message.
+   Email, Address, PIN Code, and Detailed Message.
+
+Captured Citizen Fields:
+  * Name (`name`): Citizen's full name (Mandatory)
+  * Mobile Number (`mobile`): 10-digit Indian mobile number (Mandatory)
+  * Email (`email`): Optional email address
+  * Address (`address`): Village / Ward / Area address (Optional)
+  * PIN Code (`pincode`): 6-digit postal code (Optional, validated to 6 digits)
+  * Message (`message`): Citizen query, problem or feedback (Mandatory)
+  * Source (`source`): 'home_page_quick_form' | 'contact_screen' | 'mobile_app'
 
 Both touchpoints send their payload to the unified endpoint:
   POST https://backend.misachinmalik.in/api/v1/inquiries
@@ -50,6 +59,8 @@ CREATE TABLE IF NOT EXISTS `inquiries` (
   `name` VARCHAR(255) NOT NULL,
   `mobile` VARCHAR(20) NOT NULL,
   `email` VARCHAR(255) NULL,
+  `address` TEXT NULL,
+  `pincode` VARCHAR(10) NULL,
   `subject` VARCHAR(255) NOT NULL DEFAULT 'General Contact Inquiry',
   `message` TEXT NOT NULL,
   `source` VARCHAR(50) NOT NULL DEFAULT 'mobile_app',
@@ -66,6 +77,7 @@ CREATE TABLE IF NOT EXISTS `inquiries` (
   PRIMARY KEY (`id`),
   INDEX `idx_inquiries_candidate` (`candidate_id`),
   INDEX `idx_inquiries_mobile` (`mobile`),
+  INDEX `idx_inquiries_pincode` (`pincode`),
   INDEX `idx_inquiries_status` (`status`),
   INDEX `idx_inquiries_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -86,6 +98,8 @@ model Inquiry {
   name         String        @db.VarChar(255)
   mobile       String        @db.VarChar(20)
   email        String?       @db.VarChar(255)
+  address      String?       @db.Text
+  pincode      String?       @db.VarChar(10)
   subject      String        @default("General Contact Inquiry") @db.VarChar(255)
   message      String        @db.Text
   source       String        @default("mobile_app") @db.VarChar(50)
@@ -102,6 +116,7 @@ model Inquiry {
 
   @@index([candidateId])
   @@index([mobile])
+  @@index([pincode])
   @@index([status])
   @@index([createdAt])
   @@map("inquiries")
@@ -128,6 +143,8 @@ Request Body:
   "name": "राम शिंदे",                 // required
   "mobile": "9876543210",               // required (10 digits)
   "email": "citizen@example.com",       // optional
+  "address": "शिर्डी रोड, कोपरगाव",      // optional (address / village name)
+  "pincode": "423601",                  // optional (6-digit postal PIN code)
   "subject": "General Contact Inquiry", // optional
   "message": "पाणी पुरवठा समस्येबाबत...", // required
   "fcmToken": "...",                    // optional (for push notification reply)
@@ -143,6 +160,8 @@ Success Response (201 Created):
     "id": 142,
     "name": "राम शिंदे",
     "mobile": "9876543210",
+    "address": "शिर्डी रोड, कोपरगाव",
+    "pincode": "423601",
     "subject": "General Contact Inquiry",
     "status": "pending",
     "createdAt": "2026-11-24T10:45:00.000Z"
@@ -158,7 +177,7 @@ Query Parameters:
   - `page`: number (default: 1)
   - `limit`: number (default: 20)
   - `status`: 'pending' | 'in_progress' | 'replied' | 'closed' | 'all'
-  - `search`: string (searches name, mobile, message, or subject)
+  - `search`: string (searches name, mobile, message, address, or pincode)
   - `source`: 'mobile_app' | 'home_page_quick_form' | 'contact_screen'
   - `dateFrom`: YYYY-MM-DD
   - `dateTo`: YYYY-MM-DD
@@ -173,6 +192,8 @@ Success Response (200 OK):
         "name": "राम शिंदे",
         "mobile": "9876543210",
         "email": "citizen@example.com",
+        "address": "शिर्डी रोड, कोपरगाव",
+        "pincode": "423601",
         "subject": "General Contact Inquiry",
         "message": "कोपरगाव शहरात शुद्ध पाणी पुरवठा योजना कधी सुरू होणार?",
         "source": "home_page_quick_form",
@@ -251,6 +272,8 @@ export class InquiryController {
       const name = (b.name || '').trim();
       const mobile = (b.mobile || '').trim();
       const email = b.email ? b.email.trim() : null;
+      const address = b.address ? b.address.trim() : null;
+      const pincode = b.pincode ? b.pincode.trim() : null;
       const subject = b.subject ? b.subject.trim() : 'General Contact Inquiry';
       const message = (b.message || '').trim();
       const source = b.source || 'mobile_app';
@@ -272,6 +295,13 @@ export class InquiryController {
         });
       }
 
+      if (pincode && pincode.replace(/\D/g, '').length !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'पिन कोड ६ अंकी असणे आवश्यक आहे (PIN Code must be 6 digits).',
+        });
+      }
+
       if (!message) {
         return res.status(400).json({
           success: false,
@@ -285,9 +315,9 @@ export class InquiryController {
       // SQL Insert
       const [result]: any = await db.query(
         `INSERT INTO inquiries 
-         (candidate_id, user_id, name, mobile, email, subject, message, source, status, fcm_token, expo_token, ip_address, user_agent)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
-        [candidateId, userId, name, mobile, email, subject, message, source, fcmToken, expoToken, ipAddress, userAgent]
+         (candidate_id, user_id, name, mobile, email, address, pincode, subject, message, source, status, fcm_token, expo_token, ip_address, user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+        [candidateId, userId, name, mobile, email, address, pincode, subject, message, source, fcmToken, expoToken, ipAddress, userAgent]
       );
 
       return res.status(201).json({
@@ -297,6 +327,8 @@ export class InquiryController {
           id: result.insertId,
           name,
           mobile,
+          address,
+          pincode,
           subject,
           status: 'pending',
           createdAt: new Date().toISOString(),
@@ -339,9 +371,9 @@ export class InquiryController {
       }
 
       if (search) {
-        whereClauses.push('(name LIKE ? OR mobile LIKE ? OR message LIKE ? OR subject LIKE ?)');
+        whereClauses.push('(name LIKE ? OR mobile LIKE ? OR message LIKE ? OR address LIKE ? OR pincode LIKE ? OR subject LIKE ?)');
         const searchLike = `%${search}%`;
-        queryParams.push(searchLike, searchLike, searchLike, searchLike);
+        queryParams.push(searchLike, searchLike, searchLike, searchLike, searchLike, searchLike);
       }
 
       const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
@@ -355,7 +387,7 @@ export class InquiryController {
 
       // Select paginated records
       const [rows]: any = await db.query(
-        `SELECT id, candidate_id, user_id, name, mobile, email, subject, message,
+        `SELECT id, candidate_id, user_id, name, mobile, email, address, pincode, subject, message,
                 source, status, admin_reply, replied_by, replied_at, fcm_token, expo_token,
                 created_at, updated_at
          FROM inquiries
@@ -507,6 +539,8 @@ class InquiryController extends Controller
             'mobile'      => 'required|string|min:10|max:15',
             'message'     => 'required|string',
             'email'       => 'nullable|email|max:255',
+            'address'     => 'nullable|string',
+            'pincode'     => 'nullable|string|max:10',
             'subject'     => 'nullable|string|max:255',
             'source'      => 'nullable|string|max:50',
             'fcmToken'    => 'nullable|string',
@@ -519,6 +553,8 @@ class InquiryController extends Controller
             'name'         => $validated['name'],
             'mobile'       => $validated['mobile'],
             'email'        => $validated['email'] ?? null,
+            'address'      => $validated['address'] ?? null,
+            'pincode'      => $validated['pincode'] ?? null,
             'subject'      => $validated['subject'] ?? 'General Contact Inquiry',
             'message'      => $validated['message'],
             'source'       => $validated['source'] ?? 'mobile_app',
@@ -550,6 +586,8 @@ class InquiryController extends Controller
             $query->where(function ($q) use ($s) {
                 $q->where('name', 'like', $s)
                   ->orWhere('mobile', 'like', $s)
+                  ->orWhere('address', 'like', $s)
+                  ->orWhere('pincode', 'like', $s)
                   ->orWhere('message', 'like', $s);
             });
         }
@@ -594,6 +632,8 @@ interface Inquiry {
   name: string;
   mobile: string;
   email?: string;
+  address?: string;
+  pincode?: string;
   subject: string;
   message: string;
   source: string;
@@ -698,7 +738,7 @@ export default function ContactInquiriesManager() {
             जनसंपर्क चौकशी व संदेश (Contact Inquiries)
           </h1>
           <p className="text-sm text-gray-500">
-            मोबाईल ॲपच्या Home Page व Contact Screen वरून आलेले सर्व संदेश व चौकशी
+            मोबाईल ॲपच्या Home Page व Contact Screen वरून आलेले सर्व संदेश, पत्ते व चौकशी
           </p>
         </div>
         <button
@@ -761,10 +801,10 @@ export default function ContactInquiriesManager() {
         </div>
 
         {/* Search Input */}
-        <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-80">
+        <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-96">
           <input
             type="text"
-            placeholder="नाव, मोबाईल, किंवा संदेश शोधा..."
+            placeholder="नाव, मोबाईल, पत्ता, पिनकोड किंवा संदेश शोधा..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -787,6 +827,7 @@ export default function ContactInquiriesManager() {
                 <th className="p-3">क्र.</th>
                 <th className="p-3">नागरिकाचे नाव</th>
                 <th className="p-3">मोबाईल नंबर</th>
+                <th className="p-3">पत्ता व पिनकोड</th>
                 <th className="p-3">संदेश / चौकशी</th>
                 <th className="p-3">मार्ग (Source)</th>
                 <th className="p-3">स्थिती (Status)</th>
@@ -797,13 +838,13 @@ export default function ContactInquiriesManager() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-gray-500 font-semibold">
+                  <td colSpan={9} className="p-8 text-center text-gray-500 font-semibold">
                     माहिती लोड होत आहे...
                   </td>
                 </tr>
               ) : inquiries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-gray-400 font-medium">
+                  <td colSpan={9} className="p-8 text-center text-gray-400 font-medium">
                     कोणतेही संदेश आढळले नाहीत.
                   </td>
                 </tr>
@@ -811,7 +852,10 @@ export default function ContactInquiriesManager() {
                 inquiries.map((item, idx) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition">
                     <td className="p-3 font-semibold text-gray-500">{(page - 1) * 15 + idx + 1}</td>
-                    <td className="p-3 font-bold text-gray-900">{item.name}</td>
+                    <td className="p-3 font-bold text-gray-900">
+                      <div>{item.name}</div>
+                      {item.email && <div className="text-xs text-gray-500">{item.email}</div>}
+                    </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-gray-800">{item.mobile}</span>
@@ -832,6 +876,16 @@ export default function ContactInquiriesManager() {
                           💬
                         </a>
                       </div>
+                    </td>
+                    <td className="p-3 max-w-xs text-xs text-gray-700">
+                      {item.address ? (
+                        <div>
+                          <span>📍 {item.address}</span>
+                          {item.pincode && <span className="font-mono text-gray-500 ml-1">({item.pincode})</span>}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic">नोंद नाही</span>
+                      )}
                     </td>
                     <td className="p-3 max-w-xs truncate" title={item.message}>
                       {item.message}
@@ -914,6 +968,9 @@ export default function ContactInquiriesManager() {
               <div>
                 <h3 className="text-lg font-black text-gray-900">{selectedInquiry.name}</h3>
                 <p className="text-xs text-gray-500 font-mono mt-0.5">📞 {selectedInquiry.mobile}</p>
+                {selectedInquiry.email && (
+                  <p className="text-xs text-gray-500 mt-0.5">✉️ {selectedInquiry.email}</p>
+                )}
               </div>
               <button
                 onClick={() => setSelectedInquiry(null)}
@@ -922,6 +979,33 @@ export default function ContactInquiriesManager() {
                 ✕
               </button>
             </div>
+
+            {/* Address & PIN Code Box */}
+            {(selectedInquiry.address || selectedInquiry.pincode) && (
+              <div className="bg-blue-50 p-3.5 rounded-xl border border-blue-100 mb-4 flex items-start justify-between">
+                <div>
+                  <span className="text-xs font-bold text-blue-800 uppercase block mb-0.5">
+                    पत्ता व पिनकोड:
+                  </span>
+                  <p className="text-sm text-blue-950 font-medium">
+                    {selectedInquiry.address || 'पत्ता उपलब्ध नाही'}
+                    {selectedInquiry.pincode && ` - ${selectedInquiry.pincode}`}
+                  </p>
+                </div>
+                {selectedInquiry.address && (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      `${selectedInquiry.address} ${selectedInquiry.pincode || ''}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs bg-white text-blue-600 px-2 py-1 rounded border border-blue-200 font-semibold hover:bg-blue-100 whitespace-nowrap ml-2"
+                  >
+                    🗺️ नकाशे उघडा
+                  </a>
+                )}
+              </div>
+            )}
 
             {/* Citizen Message */}
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4">
@@ -1024,11 +1108,13 @@ export interface CreateInquiryInput {
   candidate_id?: string;     // backward-compatibility alias
   userId?: string | number;  // Current authenticated user ID if logged in
   user_id?: string | number; // alias
-  name: string;              // Citizen's name
-  mobile: string;            // 10-digit mobile number
+  name: string;              // Citizen's name (Mandatory)
+  mobile: string;            // 10-digit mobile number (Mandatory)
   email?: string | null;     // Optional email
+  address?: string | null;   // Optional address / village
+  pincode?: string | null;   // Optional 6-digit postal PIN code
   subject?: string;          // "General Contact Inquiry"
-  message: string;           // Message text
+  message: string;           // Message text (Mandatory)
   fcmToken?: string | null;  // For in-app push notification
   fcm_token?: string | null;
   expoToken?: string | null; // For Expo push service
@@ -1052,13 +1138,15 @@ curl -s -X POST "https://backend.misachinmalik.in/api/v1/inquiries" \
     "name": "चाचणी नागरिक",
     "mobile": "9876543210",
     "email": "test@misachinmalik.in",
+    "address": "शिर्डी रोड, कोपरगाव",
+    "pincode": "423601",
     "subject": "विकास आराखडा चौकशी",
     "message": "कोपरगाव शहरातील रस्ते दुरुस्तीबाबत माहिती हवी आहे.",
     "source": "home_page_quick_form"
   }'
 
 Expected HTTP 201 Response:
-{"success":true,"message":"आपला संदेश यशस्वीरीत्या कार्यालयाकडे नोंदवला गेला आहे.","data":{"id":1,...}}
+{"success":true,"message":"आपला संदेश यशस्वीरीत्या सचिन मलिक कार्यालयाकडे नोंदवला गेला आहे.","data":{"id":1,"name":"चाचणी नागरिक","mobile":"9876543210","address":"शिर्डी रोड, कोपरगाव","pincode":"423601",...}}
 
 
 2. TEST ADMIN FETCH INQUIRIES LIST:
